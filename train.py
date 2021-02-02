@@ -10,12 +10,17 @@ import torch.nn as nn
 from model import CONV_LSTM
 
 
-# dev='cuda:0'
-dev = 'cpu'
-root_dir = 'data/' # TEST DATA
+dev='cuda:0'
+# dev = 'cpu'
+root_dir = '/media/lab/Local Libraries/TorchDir'
+# root_dir = 'data/' # TEST DATA
 # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 flight_data = CustomDataset(root_dir, ToTensor(), dev)
 flight_data.validate_sets(underMin=100)
+
+total_flights = len(flight_data)
+train_flights = np.random.choice(total_flights, int(total_flights*.8), replace=False)
+test_flights =list(set(range(len(flight_data))) - set(train_flights))
 
 # train_model
 paradigms = {0: 'Regression', 1: 'Seq2Seq'}
@@ -25,7 +30,9 @@ epochs = 5
 sttime = datetime.now()
 print('START FIT: {}'.format(sttime))
 
-model.fit(flight_data, epochs)
+model.fit(flight_data, epochs, train_flights)
+print('test flights:\n{}'.format(test_flights))
+np.savetxt('test_flight_samples.txt', np.array(test_flights), fmt='%d', delimiter=',', newline='\n')
 
 edtime = datetime.now()
 print('END FIT: {}'.format(edtime))

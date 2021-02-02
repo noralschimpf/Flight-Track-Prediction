@@ -94,7 +94,7 @@ class CONV_LSTM(nn.Module):
                 model_path = 'Models/' + name
         torch.save(self.state_dict(), model_path)
 
-    def fit(self, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default'):
+    def fit(self, flight_data: torch.utils.data.DataLoader, epochs: int, flights_sampled: list, model_name: str = 'Default'):
         # TODO: add graphics: loss over epoch, acc over epoch
         # TODO: BATCH FLIGHTS
         # TODO: Initialize Flight Coords
@@ -105,13 +105,13 @@ class CONV_LSTM(nn.Module):
 
             rg_flights = None
             if self.paradigm == 'Regression':
-                rg_flights = range(len(flight_data))
+                rg_flights = range(len(flights_sampled))
             elif self.paradigm == 'Seq2Seq':
-                rg_flights = tqdm.trange(len(flight_data))
+                rg_flights = tqdm.trange(len(flights_sampled))
 
             for i in rg_flights:  # was len(flight_data)
                 # Extract flight plan, flight track, and weather cubes
-                fp, ft, wc = flight_data[i]
+                fp, ft, wc = flight_data[flights_sampled[i]]
                 # TODO: Move to Dataloader
                 maxlen = min(len(fp), len(ft), len(wc))
                 wc = wc[:maxlen]
@@ -120,7 +120,7 @@ class CONV_LSTM(nn.Module):
                 # train_dataset = [wc[i], fp[i], ft[i]]
 
                 if self.paradigm == 'Regression':
-                    print("\nFlight {}/{}: ".format(i + 1, len(flight_data)) + str(len(fp)) + " points")
+                    print("\nFlight {}/{}: ".format(i + 1, len(rg_flights)) + str(len(fp)) + " points")
                     for pt in tqdm.trange(len(wc)):
                         self.optimizer.zero_grad()
                         lat, lon = fp[0][0].clone().detach().cuda(self.device), fp[0][1].clone().detach().cuda(self.device)
@@ -131,10 +131,10 @@ class CONV_LSTM(nn.Module):
                         y_pred = self(wc[:pt + 1].reshape((-1, 1, 20, 20)), fp[:pt + 1])
                         # print(y_pred)
                         single_loss = self.loss_function(y_pred, ft[:pt + 1].view(-1, 2))
-                        if i < len(flight_data) - 1 and pt % 50 == 0:
+                        if i < len(rg_flights) - 1 and pt % 50 == 0:
                             single_loss.backward()
                             self.optimizer.step()
-                        if i == len(flight_data) - 1:
+                        if i == len(rg_flights) - 1:
                             losses = torch.cat((losses, single_loss.view(-1)))
                 elif self.paradigm == 'Seq2Seq':
                     self.optimizer.zero_grad()
@@ -146,7 +146,7 @@ class CONV_LSTM(nn.Module):
                     losses = torch.cat((losses, single_loss.view(-1)))
                     single_loss.backward()
                     self.optimizer.step()
-            if i == len(flight_data) - 1:
+            if i == len(rg_flights) - 1:
                 epoch_losses = torch.cat((epoch_losses, torch.mean(losses).view(-1)))
 
                 if self.device.__contains__('cuda'):
@@ -165,11 +165,11 @@ class CONV_LSTM(nn.Module):
         plt.xlabel('Epoch')
         plt.ylabel('Avg Loss (MSE)')
 
-    def evaluate(self, flight_data: torch.utils.data.DataLoader):
-        for i in range(len(flight_data)):
-            fp, ft, wc = flight_data[i]
+    def evaluate(self, flight_data: torch.utils.data.DataLoader, flights_sampled: list):
+        for i in range(len(flights_sampled)):
+            fp, ft, wc = flight_data[flights_sampled[i]]
             wc = wc[:len(fp)]
-            print("\nFlight {}/{}: ".format(i + 1, len(flight_data)) + str(len(fp)) + " points")
+            print("\nFlight {}/{}: ".format(i + 1, len(flights_sampled)) + str(len(fp)) + " points")
 
             losses = torch.zeros(len(wc), requires_grad=False, device=self.device)
             preds = torch.zeros(len(wc), requires_grad=False, device=self.device)
