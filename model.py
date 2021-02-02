@@ -42,11 +42,11 @@ class CONV_LSTM(nn.Module):
         # initiate LSTM hidden cell with 0
         self.hidden_cell = (torch.zeros(1, 1, self.lstm_hidden), torch.zeros(1, 1, self.lstm_hidden))
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
-        self.loss_function = nn.MSELoss()
-
         if self.device.__contains__('cuda'):
             self.cuda(self.device)
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        self.loss_function = nn.MSELoss()
 
     def forward(self, x_w, x_t):
         # convolution apply first
@@ -81,9 +81,9 @@ class CONV_LSTM(nn.Module):
         # print(predictions)
         return predictions
 
-    def save_model(self,epochs, model_name: str = None):
+    def save_model(self,epochs, opt, model_name: str = None):
         if model_name == None:
-            model_name = 'CONV-LSTM OPT:{} LOSS:{} EPOCHS: {} LSTM: {} {} {}'.format(epochs, self.optimizer, self.loss_function, self.lstm_input, self.lstm_hidden, self.lstm_output)
+            model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-LSTM{}_{}_{}'.format(opt,self.loss_function, epochs, self.lstm_input, self.lstm_hidden, self.lstm_output)
         model_path = 'Models/' + model_name
         while os.path.isfile(model_path):
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
@@ -147,7 +147,7 @@ class CONV_LSTM(nn.Module):
                     single_loss.backward()
                     self.optimizer.step()
             if i == len(flight_data) - 1:
-                epoch_losses = torch.cat((epoch_losses, torch.mean(losses)))
+                epoch_losses = torch.cat((epoch_losses, torch.mean(losses).view(-1)))
 
                 if self.device.__contains__('cuda'):
                     losses = losses.cpu()
@@ -160,7 +160,7 @@ class CONV_LSTM(nn.Module):
                 plt.close()
         if self.device.__contains__('cuda'):
             epoch_losses = epoch_losses.cpu()
-        plt.plot(epoch_losses.detach().numpy)
+        plt.plot(epoch_losses.detach().numpy())
         plt.title('Avg Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Avg Loss (MSE)')

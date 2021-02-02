@@ -12,8 +12,8 @@ from model import CONV_LSTM
 
 # dev='cuda:0'
 dev = 'cpu'
-# root_dir = 'data/' TEST DATA
-root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
+root_dir = 'data/' # TEST DATA
+# root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 flight_data = CustomDataset(root_dir, ToTensor(), dev)
 flight_data.validate_sets(underMin=100)
 
@@ -30,7 +30,7 @@ model.fit(flight_data, epochs)
 edtime = datetime.now()
 print('END FIT: {}'.format(edtime))
 
-model.save_model(epochs=epochs)
+model.save_model(opt='Adam', epochs=epochs)
 
 
 print('DONE: {}'.format(edtime-sttime))
