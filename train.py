@@ -28,11 +28,15 @@ model = CONV_LSTM(paradigm=paradigms[1],device=dev) #customized Convolution and 
 # set training epochs and train
 epochs = 5
 sttime = datetime.now()
-print('START FIT: {}'.format(sttime))
 
+print('START FIT: {}'.format(sttime))
 model.fit(flight_data, epochs, train_flights)
+
 print('test flights:\n{}'.format(test_flights))
 np.savetxt('test_flight_samples.txt', np.array(test_flights), fmt='%d', delimiter=',', newline='\n')
+
+test_flights = np.loadtxt('test_flight_samples.txt', dtype='int', delimiter=',')
+model.evaluate(flight_data, flights_sampled=test_flights)
 
 edtime = datetime.now()
 print('END FIT: {}'.format(edtime))
