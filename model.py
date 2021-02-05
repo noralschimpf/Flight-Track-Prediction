@@ -190,7 +190,7 @@ class CONV_LSTM(nn.Module):
 
                 fp, ft, wc = flight_data[flights_sampled[i]]
                 maxlen = min(len(fp), len(ft), len(wc))
-                fp, ft, wc = fp[:maxlen, 1:], ft[:maxlen, 1:], wc[:maxlen]
+                fp, ft, wc = fp[:, 1:], ft[:, 1:], wc[:]
 
                 self.optimizer.zero_grad()
                 self.hidden_cell = (
