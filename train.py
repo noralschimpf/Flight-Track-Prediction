@@ -1,8 +1,10 @@
 import numpy as np
+import pandas as pd
 from datetime import datetime
-from custom_dataset import CustomDataset
+from custom_dataset import CustomDataset, ValidFiles, SplitStrList
 from custom_dataset import ToTensor
 from model import CONV_LSTM
+from torch.utils.data import DataLoader
 
 # TODO: BATCH FLIGHTS
 '''TRAINING CONFIGS
@@ -12,37 +14,41 @@ from model import CONV_LSTM
 
 '''
 
-dev = 'cuda:0'
+dev = 'cuda:1'
 # dev = 'cpu'
 root_dir = '/media/lab/Local Libraries/TorchDir'
 # root_dir = 'data/' # TEST DATA
 # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
-flight_data = CustomDataset(root_dir, ToTensor(), dev)
-flight_data.validate_sets(under_min=100)
+fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
 
-total_flights = len(flight_data)
+total_flights = len(fps)
 train_flights = np.random.choice(total_flights, int(total_flights * .9), replace=False)
-test_flights = list(set(range(len(flight_data))) - set(train_flights))
+test_flights = list(set(range(len(fps))) - set(train_flights))
+train_flights.sort()
+test_flights.sort()
 
+fps_train, fps_test = SplitStrList(fps, test_flights)
+fts_train, fts_test = SplitStrList(fts, test_flights)
+wcs_train, wcs_test = SplitStrList(wcs, test_flights)
+
+train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), dev)
+
+print('test flights:\n{}'.format(test_flights))
+df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
+df_testfiles.to_csv('test_flight_samples.txt')
+
+
+train_dl = DataLoader(train_dataset, batch_size=64, shuffle=False, drop_last=True)
 # train_model
 paradigms = {0: 'Regression', 1: 'Seq2Seq'}
 model = CONV_LSTM(paradigm=paradigms[1], device=dev)
 # set training epochs and train
-epochs = 5
+epochs = 1000
 sttime = datetime.now()
 
 print('START FIT: {}'.format(sttime))
-model.fit(flight_data, epochs, train_flights)
-
-print('test flights:\n{}'.format(test_flights))
-np.savetxt('test_flight_samples.txt', np.array(test_flights), fmt='%d', delimiter=',', newline='\n')
-
-test_flights = np.loadtxt('test_flight_samples.txt', dtype='int', delimiter=',')
-model.evaluate(flight_data, flights_sampled=test_flights)
-
-edtime = datetime.now()
-print('END FIT: {}'.format(edtime))
-
+model.fit(train_dl, epochs, train_flights)
 model.save_model(opt='Adam', epochs=epochs)
 
+edtime = datetime.now()
 print('DONE: {}'.format(edtime - sttime))

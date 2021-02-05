@@ -11,7 +11,7 @@ from custom_dataset import CustomDataset, ToTensor
 
 root = 'data/'
 output = 'Output/'
-dev = 'cpu'
+dev = 'cuda:1'
 
 # open model and data
 mdl = load_model('Models/CONV-LSTM-OPTAdam-LOSSMSELoss()-EPOCHS5-LSTM6_100_2')

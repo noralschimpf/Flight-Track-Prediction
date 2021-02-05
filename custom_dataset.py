@@ -8,68 +8,15 @@ import os
 
 
 class CustomDataset(Dataset):
-    def __init__(self, root_dir, transform=None, device='cpu'):
+    def __init__(self, root_dir, abspath_fp: str, abspath_ft: str, abspath_wc: str, transform=None, device='cpu'):
         self.device = device
         self.root_dir = root_dir
         self.transform = transform
         # for i in common_dates, fp/common_dates.__contains__(flight) and ..... then abspath for each data item
         self.common_dates = []
-        self.flight_plan = []
-        self.flight_track = []
-        self.weather_cube = []
-        self.unusable = []
-        dates_fp = os.listdir(root_dir + '/Flight Plans')
-        dates_ft = os.listdir(root_dir + '/Flight Tracks')
-        dates_wc = os.listdir(root_dir + '/Weather Cubes')
-
-        for date in dates_fp:
-            if dates_ft.__contains__(date) and dates_wc.__contains__(date):
-                self.common_dates.append(date)
-
-        for date in self.common_dates:
-            fp_dir = root_dir + '/Flight Plans/' + date
-            ft_dir = root_dir + '/Flight Tracks/' + date
-            wc_dir = root_dir + '/Weather Cubes/' + date
-            tmp_fp = os.listdir(fp_dir)
-            tmp_ft = os.listdir(ft_dir)
-            tmp_wc = os.listdir(wc_dir)
-
-            for fp in tmp_fp:
-                flight_desc = '_'.join(fp.split('_')[2:])
-                ft = 'Flight_Track_' + flight_desc
-                wc = fp.replace('.txt', '.nc')
-                try:
-                    fp_idx = tmp_fp.index(fp)
-                    ft_idx = tmp_ft.index(ft)
-                    wc_idx = tmp_wc.index(wc)
-                    self.flight_plan.append(os.path.abspath(fp_dir + '/' + fp))
-                    self.flight_track.append(os.path.abspath(ft_dir + '/' + ft))
-                    self.weather_cube.append(os.path.abspath(wc_dir + '/' + wc))
-
-                # Unusables: missing flight plan, flight track, or weather cube file
-                except ValueError:
-                    self.unusable.append('/'.join([date, flight_desc]))
-        print("{} Available Flights, {}  incompatible".format(len(self.flight_plan), len(self.unusable)))
-
-    def validate_sets(self, under_min: int = 100):
-        list_underMin = []
-        print('Validating Flight Data:')
-        for i in tqdm.trange(len(self.flight_plan)):
-            df_fp = pd.read_csv(self.flight_plan[i], usecols=(0, 1, 2))
-            df_ft = pd.read_csv(self.flight_track[i], usecols=(0, 1, 2))
-            wCubes = DSet(self.weather_cube[i], 'r', format='netCDF4')
-            if df_fp.shape[0] < under_min or df_ft.shape[0] < under_min or wCubes['Echo_Top'].shape[0] < under_min:
-                list_underMin.append(i)
-        print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), under_min, list_underMin))
-        for i in range(len(list_underMin)):
-            flight_desc = self.flight_plan[list_underMin[i] - i].split('\\')[-2:]
-            flight_desc[-1] = '_'.join(flight_desc[-1].split('_')[2:])
-            flight_desc = '/'.join(flight_desc)
-            self.unusable.append(flight_desc)
-            self.flight_plan.pop(list_underMin[i] - i)
-            self.flight_track.pop(list_underMin[i] - i)
-            self.weather_cube.pop(list_underMin[i] - i)
-        print('{} Available flights, {} unusable flights'.format(len(self.flight_plan), len(self.unusable)))
+        self.flight_plan = abspath_fp
+        self.flight_track = abspath_ft
+        self.weather_cube = abspath_wc
 
     def __len__(self):
         return len(self.flight_plan)
@@ -101,3 +48,67 @@ class ToTensor(object):
         else:
             print("WARNING: object of type " + str(type(sample)) + " not converted")
             return sample
+
+def ValidFiles(root_dir: str, under_min: int = 100):
+    dates_fp = os.listdir(root_dir + '/Flight Plans')
+    dates_ft = os.listdir(root_dir + '/Flight Tracks')
+    dates_wc = os.listdir(root_dir + '/Weather Cubes')
+
+    common_dates, flight_plan, flight_track, weather_cube, unusable = [], [], [], [], []
+
+    for date in dates_fp:
+        if dates_ft.__contains__(date) and dates_wc.__contains__(date):
+            common_dates.append(date)
+
+    for date in common_dates:
+        fp_dir = root_dir + '/Flight Plans/' + date
+        ft_dir = root_dir + '/Flight Tracks/' + date
+        wc_dir = root_dir + '/Weather Cubes/' + date
+        tmp_fp = os.listdir(fp_dir)
+        tmp_ft = os.listdir(ft_dir)
+        tmp_wc = os.listdir(wc_dir)
+
+        for fp in tmp_fp:
+            flight_desc = '_'.join(fp.split('_')[2:])
+            ft = 'Flight_Track_' + flight_desc
+            wc = fp.replace('.txt', '.nc')
+            try:
+                fp_idx = tmp_fp.index(fp)
+                ft_idx = tmp_ft.index(ft)
+                wc_idx = tmp_wc.index(wc)
+                flight_plan.append(os.path.abspath(fp_dir + '/' + fp))
+                flight_track.append(os.path.abspath(ft_dir + '/' + ft))
+                weather_cube.append(os.path.abspath(wc_dir + '/' + wc))
+
+            # Unusables: missing flight plan, flight track, or weather cube file
+            except ValueError:
+                unusable.append('/'.join([date, flight_desc]))
+    print("{} Available Flights, {}  incompatible".format(len(flight_plan), len(unusable)))
+
+    list_underMin = []
+    for i in tqdm.trange(len(flight_plan)):
+        df_fp = pd.read_csv(flight_plan[i], usecols=(0, 1, 2))
+        df_ft = pd.read_csv(flight_track[i], usecols=(0, 1, 2))
+        wCubes = DSet(weather_cube[i], 'r', format='netCDF4')
+        if df_fp.shape[0] < under_min or df_ft.shape[0] < under_min or wCubes['Echo_Top'].shape[0] < under_min:
+            list_underMin.append(i)
+    print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), under_min, list_underMin))
+    for i in range(len(list_underMin)):
+        flight_desc = flight_plan[list_underMin[i] - i].split('\\')[-2:]
+        flight_desc[-1] = '_'.join(flight_desc[-1].split('_')[2:])
+        flight_desc = '/'.join(flight_desc)
+        unusable.append(flight_desc)
+        flight_plan.pop(list_underMin[i] - i)
+        flight_track.pop(list_underMin[i] - i)
+        weather_cube.pop(list_underMin[i] - i)
+    print('{} Available flights, {} unusable flights'.format(len(flight_plan), len(unusable)))
+
+    return flight_plan, flight_track, weather_cube, common_dates, unusable
+
+def SplitStrList(str_list: str, test_idx: int):
+    test_idx.sort(reverse=True)
+    train_list, test_list = [], []
+    for i in range(len(str_list)):
+        if i in test_idx: test_list.append(str_list[i])
+        else: train_list.append(str_list[i])
+    return train_list, test_list
