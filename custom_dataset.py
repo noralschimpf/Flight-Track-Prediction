@@ -1,4 +1,5 @@
-import torch, tqdm
+import torch
+import tqdm
 from torch.utils.data import Dataset
 from netCDF4 import Dataset as DSet
 import pandas as pd
@@ -48,31 +49,30 @@ class CustomDataset(Dataset):
                 # Unusables: missing flight plan, flight track, or weather cube file
                 except ValueError:
                     self.unusable.append('/'.join([date, flight_desc]))
-        print("{} Available Flights, {}  incompatible".format(len(self.flight_plan),len(self.unusable)))
+        print("{} Available Flights, {}  incompatible".format(len(self.flight_plan), len(self.unusable)))
 
-    def validate_sets(self, underMin: int = 100):
+    def validate_sets(self, under_min: int = 100):
         list_underMin = []
         print('Validating Flight Data:')
         for i in tqdm.trange(len(self.flight_plan)):
-            df_fp = pd.read_csv(self.flight_plan[i], usecols=(0,1,2))
-            df_ft = pd.read_csv(self.flight_track[i], usecols=(0,1,2))
+            df_fp = pd.read_csv(self.flight_plan[i], usecols=(0, 1, 2))
+            df_ft = pd.read_csv(self.flight_track[i], usecols=(0, 1, 2))
             wCubes = DSet(self.weather_cube[i], 'r', format='netCDF4')
-            if df_fp.shape[0] < underMin or df_ft.shape[0] < underMin or wCubes['Echo_Top'].shape[0] < underMin:
+            if df_fp.shape[0] < under_min or df_ft.shape[0] < under_min or wCubes['Echo_Top'].shape[0] < under_min:
                 list_underMin.append(i)
-        print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), underMin, list_underMin))
+        print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), under_min, list_underMin))
         for i in range(len(list_underMin)):
-            flight_desc = self.flight_plan[list_underMin[i]-i].split('\\')[-2:]
+            flight_desc = self.flight_plan[list_underMin[i] - i].split('\\')[-2:]
             flight_desc[-1] = '_'.join(flight_desc[-1].split('_')[2:])
             flight_desc = '/'.join(flight_desc)
             self.unusable.append(flight_desc)
-            self.flight_plan.pop(list_underMin[i]-i)
-            self.flight_track.pop(list_underMin[i]-i)
-            self.weather_cube.pop(list_underMin[i]-i)
+            self.flight_plan.pop(list_underMin[i] - i)
+            self.flight_track.pop(list_underMin[i] - i)
+            self.weather_cube.pop(list_underMin[i] - i)
         print('{} Available flights, {} unusable flights'.format(len(self.flight_plan), len(self.unusable)))
 
-
     def __len__(self):
-      return len(self.flight_plan)
+        return len(self.flight_plan)
 
     def __getitem__(self, idx):
         fp = pd.read_csv(self.flight_plan[idx], usecols=(0, 1, 2)).values
@@ -92,8 +92,6 @@ class CustomDataset(Dataset):
     def get_flightname(self, idx):
         flight_desc = '_'.join(self.flight_plan[idx].split('\\')[-2:])
         return flight_desc
-
-
 
 
 class ToTensor(object):

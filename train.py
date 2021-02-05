@@ -1,12 +1,7 @@
 import numpy as np
-import csv
-import torch
-from netCDF4 import Dataset
 from datetime import datetime
-from matplotlib import pyplot as plt
 from custom_dataset import CustomDataset
 from custom_dataset import ToTensor
-import torch.nn as nn
 from model import CONV_LSTM
 
 # TODO: BATCH FLIGHTS
@@ -17,21 +12,21 @@ from model import CONV_LSTM
 
 '''
 
-dev='cuda:0'
+dev = 'cuda:0'
 # dev = 'cpu'
 root_dir = '/media/lab/Local Libraries/TorchDir'
 # root_dir = 'data/' # TEST DATA
 # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 flight_data = CustomDataset(root_dir, ToTensor(), dev)
-flight_data.validate_sets(underMin=100)
+flight_data.validate_sets(under_min=100)
 
 total_flights = len(flight_data)
-train_flights = np.random.choice(total_flights, int(total_flights*.9), replace=False)
-test_flights =list(set(range(len(flight_data))) - set(train_flights))
+train_flights = np.random.choice(total_flights, int(total_flights * .9), replace=False)
+test_flights = list(set(range(len(flight_data))) - set(train_flights))
 
 # train_model
 paradigms = {0: 'Regression', 1: 'Seq2Seq'}
-model = CONV_LSTM(paradigm=paradigms[1],device=dev)
+model = CONV_LSTM(paradigm=paradigms[1], device=dev)
 # set training epochs and train
 epochs = 5
 sttime = datetime.now()
@@ -50,8 +45,4 @@ print('END FIT: {}'.format(edtime))
 
 model.save_model(opt='Adam', epochs=epochs)
 
-
-print('DONE: {}'.format(edtime-sttime))
-
-
-
+print('DONE: {}'.format(edtime - sttime))

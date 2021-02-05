@@ -1,4 +1,5 @@
-import torch, tqdm
+import torch
+import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -8,8 +9,7 @@ import os
 # customized Convolution and LSTM model
 class CONV_LSTM(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
-                 dense_output=4, \
-                 lstm_input=6, lstm_hidden=100, lstm_output=2):
+                 dense_output=4, lstm_input=6, lstm_hidden=100, lstm_output=2):
         # conv and lstm input and output parameters can be customized
         super().__init__()
         # convolution layer for weather feature extraction prior to the LSTM
@@ -49,10 +49,12 @@ class CONV_LSTM(nn.Module):
         self.loss_function = nn.MSELoss()
 
         self.struct_dict = {'device': self.device, 'paradigm': self.paradigm,
-                        'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden, 'conv_output': self.conv_output,
-                        'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
-                        'lstm_input': self.lstm_input, 'lstm_hidden': self.lstm_hidden, 'lstm_output': self.lstm_output,
-                        'loss_fn': self.loss_function, 'optim': self.optimizer}
+                            'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
+                            'conv_output': self.conv_output,
+                            'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
+                            'lstm_input': self.lstm_input, 'lstm_hidden': self.lstm_hidden,
+                            'lstm_output': self.lstm_output,
+                            'loss_fn': self.loss_function, 'optim': self.optimizer}
 
     def forward(self, x_w, x_t):
         # convolution apply first
@@ -118,7 +120,7 @@ class CONV_LSTM(nn.Module):
             for i in rg_flights:  # was len(flight_data)
                 # Extract flight plan, flight track, and weather cubes
                 fp, ft, wc = flight_data[flights_sampled[i]]
-                fp, ft = fp[:,1:], ft[:,1:]
+                fp, ft = fp[:, 1:], ft[:, 1:]
                 if self.paradigm == 'Regression':
                     print("\nFlight {}/{}: ".format(i + 1, len(rg_flights)) + str(len(fp)) + " points")
                     for pt in tqdm.trange(len(wc)):
