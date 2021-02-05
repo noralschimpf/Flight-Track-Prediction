@@ -85,9 +85,7 @@ class CustomDataset(Dataset):
             wc = self.transform(wc['Echo_Top'][:], device=self.device)
 
         maxlen = min(len(fp), len(ft), len(wc))
-        wc = wc[:maxlen]
-        fp = fp[:maxlen, 1:]
-        ft = ft[:maxlen, 1:]
+        wc, fp, ft = wc[:maxlen], fp[:maxlen], ft[:maxlen]
 
         return fp, ft, wc
 
