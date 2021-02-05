@@ -95,9 +95,6 @@ class CONV_LSTM(nn.Module):
         torch.save(self.state_dict(), model_path)
 
     def fit(self, flight_data: torch.utils.data.DataLoader, epochs: int, flights_sampled: list, model_name: str = 'Default'):
-        # TODO: add graphics: loss over epoch, acc over epoch
-        # TODO: BATCH FLIGHTS
-        # TODO: Initialize Flight Coords
 
         epoch_losses = torch.tensor((),device=self.device)
         for ep in range(epochs):
@@ -112,12 +109,7 @@ class CONV_LSTM(nn.Module):
             for i in rg_flights:  # was len(flight_data)
                 # Extract flight plan, flight track, and weather cubes
                 fp, ft, wc = flight_data[flights_sampled[i]]
-                # TODO: Move to Dataloader
-                maxlen = min(len(fp), len(ft), len(wc))
-                wc = wc[:maxlen]
-                fp = fp[:maxlen, 1:]
-                ft = ft[:maxlen, 1:]
-                # train_dataset = [wc[i], fp[i], ft[i]]
+
 
                 if self.paradigm == 'Regression':
                     print("\nFlight {}/{}: ".format(i + 1, len(rg_flights)) + str(len(fp)) + " points")
