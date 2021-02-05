@@ -89,6 +89,11 @@ class CustomDataset(Dataset):
 
         return fp, ft, wc
 
+    def get_flightname(self, idx):
+        flight_desc = '_'.join(self.flight_plan[idx].split('\\')[-2:])
+        return flight_desc
+
+
 
 
 class ToTensor(object):
