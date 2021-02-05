@@ -113,12 +113,12 @@ class CONV_LSTM(nn.Module):
             if self.paradigm == 'Regression':
                 rg_flights = range(len(flights_sampled))
             elif self.paradigm == 'Seq2Seq':
-                rg_flights = tqdm.trange(len(flights_sampled))
+                rg_flights = tqdm.trange(5)
 
             for i in rg_flights:  # was len(flight_data)
                 # Extract flight plan, flight track, and weather cubes
                 fp, ft, wc = flight_data[flights_sampled[i]]
-
+                fp, ft = fp[:,1:], ft[:,1:]
                 if self.paradigm == 'Regression':
                     print("\nFlight {}/{}: ".format(i + 1, len(rg_flights)) + str(len(fp)) + " points")
                     for pt in tqdm.trange(len(wc)):
