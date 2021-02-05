@@ -115,7 +115,7 @@ class CONV_LSTM(nn.Module):
             if self.paradigm == 'Regression':
                 rg_flights = range(len(flights_sampled))
             elif self.paradigm == 'Seq2Seq':
-                rg_flights = tqdm.trange(5)
+                rg_flights = tqdm.trange(len(flights_sampled))
 
             for i in rg_flights:  # was len(flight_data)
                 # Extract flight plan, flight track, and weather cubes
@@ -166,6 +166,7 @@ class CONV_LSTM(nn.Module):
         plt.title('Avg Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Avg Loss (MSE)')
+        plt.savefig('Initialized Plots/Training Overview.png',dpi=400)
 
     def evaluate(self, flight_data: torch.utils.data.DataLoader, flights_sampled: list):
 
