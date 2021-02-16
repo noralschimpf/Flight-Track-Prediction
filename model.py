@@ -102,17 +102,18 @@ class CONV_LSTM(nn.Module):
             elif choice == '2':
                 name = input("Enter model name\n")
                 model_path = 'Models/' + name
-        torch.save({'Construction Params': self.struct_dict, 'state_dict': self.state_dict()}, model_path)
+        torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict()}, model_path)
 
     def fit(self, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default'):
         epoch_losses = torch.zeros(epochs, device=self.device)
-        for ep in range(epochs):
+        for ep in tqdm.trange(epochs, desc='epoch', position=0, leave=False):
             losses = torch.zeros(len(flight_data), device=self.device)
 
-            for batch_idx, (fp, ft, wc) in enumerate(tqdm.tqdm(flight_data)):  # was len(flight_data)
+            for batch_idx, (fp, ft, wc) in enumerate(tqdm.tqdm(flight_data, desc='flight', position=1, leave=False)):  # was len(flight_data)
                 # Extract flight plan, flight track, and weather cubes
-                fp, ft, wc = fp[:, :, 1:].cuda(non_blocking=True), ft[:, :, 1:].cuda(non_blocking=True), wc.cuda(non_blocking=True)
-
+                fp= fp[:, :, 1:].cuda(device=self.device, non_blocking=True)
+                ft = ft[:, :, 1:].cuda(device=self.device, non_blocking=True)
+                wc = wc.cuda(device=self.device, non_blocking=True)
                 if self.paradigm == 'Regression':
                     print("\nFlight {}/{}: ".format(batch_idx + 1, len(flight_data)) + str(len(fp)) + " points")
                     for pt in tqdm.trange(len(wc)):
@@ -173,7 +174,7 @@ class CONV_LSTM(nn.Module):
 
                 losses = torch.zeros(len(wc), requires_grad=False, device=self.device)
                 preds = torch.zeros(len(wc), requires_grad=False, device=self.device)
-                lbls = torch.zeros(len(wc), ruires_grad=False, device=self.device)
+                lbls = torch.zeros(len(wc), requires_grad=False, device=self.device)
 
                 for pt in tqdm.trange(len(wc)):
                     test_dataset = [wc[i], fp[i], ft[i]]
@@ -226,13 +227,13 @@ class CONV_LSTM(nn.Module):
 
 def load_model(model_path: str):
     dicts = torch.load(model_path)
-    struct = dicts['Construction Params']
+    struct = dicts['struct_dict']
     state_dict = dicts['state_dict']
     mdl = CONV_LSTM(paradigm=struct['paradigm'],
                     conv_input=struct['conv_input'], conv_hidden=struct['conv_hidden'],
                     conv_output=struct['conv_output'],
                     dense_hidden=struct['dense_hidden'], dense_output=struct['dense_output'],
                     lstm_input=struct['lstm_input'], lstm_hidden=struct['lstm_hidden'],
-                    lstm_output=struct['lstm_output'])
+                    lstm_output=struct['lstm_output'], device=struct['device'])
     mdl.load_state_dict(state_dict)
     return (mdl)

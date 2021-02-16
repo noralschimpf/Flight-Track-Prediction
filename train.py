@@ -44,7 +44,7 @@ if __name__ == '__main__':
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     model = CONV_LSTM(paradigm=paradigms[1], device=dev)
     # set training epochs and train
-    epochs = 100
+    epochs = 20
     sttime = datetime.now()
 
     print('START FIT: {}'.format(sttime))
