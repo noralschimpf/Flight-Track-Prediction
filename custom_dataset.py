@@ -1,5 +1,6 @@
 import torch
 import tqdm
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 from netCDF4 import Dataset as DSet
 import pandas as pd
@@ -112,3 +113,10 @@ def SplitStrList(str_list: str, test_idx: int):
         if i in test_idx: test_list.append(str_list[i])
         else: train_list.append(str_list[i])
     return train_list, test_list
+
+def pad_batch(batch):
+    fp = [item[0] for item in batch]
+    ft = [item[1] for item in batch]
+    wc = [item[2] for item in batch]
+    fp, ft, wc = pad_sequence(fp, batch_first=True), pad_sequence(ft, batch_first=True), pad_sequence(wc, batch_first=True)
+    return [fp, ft, wc]

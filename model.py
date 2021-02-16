@@ -77,11 +77,11 @@ class CONV_LSTM(nn.Module):
         lstm_input_seq = torch.cat((x_fc_2.detach().view(-1, 4), x_t.view(-1, 2)), 1)
 
         # feed input_seq into LSTM model
-        if self.device.__contains__('cuda'):
-            lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1).cuda(self.device),
-                                                  self.hidden_cell)
-        else:
-            lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1), self.hidden_cell)
+        # if self.device.__contains__('cuda'):
+        #     lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1).cuda(self.device),
+        #                                           self.hidden_cell)
+        # else:
+        lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1), self.hidden_cell)
 
         # TODO: Dimension expansion (eq. 2l in Pang, Xu, Liu)
         predictions = self.linear(lstm_out.view(len(lstm_input_seq), -1))
@@ -133,6 +133,7 @@ class CONV_LSTM(nn.Module):
                 elif self.paradigm == 'Seq2Seq':
                     self.optimizer.zero_grad()
                     # iterate LSTM passes for batch size
+                    #TODO: NOT ITERATE
                     for i in range(len(fp)):
                         self.hidden_cell = (
                             torch.repeat_interleave(fp[0, 0, 0], self.lstm_hidden).view(1, 1, self.lstm_hidden),
