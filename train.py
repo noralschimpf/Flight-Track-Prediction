@@ -1,7 +1,9 @@
+import torch
+
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from custom_dataset import CustomDataset, ValidFiles, SplitStrList, collate_fn_batch_padding
+from custom_dataset import CustomDataset, ValidFiles, SplitStrList
 from custom_dataset import ToTensor
 from model import CONV_LSTM
 from torch.utils.data import DataLoader
@@ -14,15 +16,16 @@ from torch.utils.data import DataLoader
 
 '''
 if __name__ == '__main__':
-    dev = 'cuda:1'
+    torch.multiprocessing.set_start_method('spawn')
+    dev = 'cuda:0'
     # dev = 'cpu'
-    root_dir = '/media/lab/Local Libraries/TorchDir'
-    # root_dir = 'data/' # TEST DATA
+    # root_dir = '/media/lab/Local Libraries/TorchDir'
+    root_dir = 'data/' # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
 
     total_flights = len(fps)
-    train_flights = np.random.choice(total_flights, int(total_flights * .9), replace=False)
+    train_flights = np.random.choice(total_flights, int(total_flights * .75), replace=False)
     test_flights = list(set(range(len(fps))) - set(train_flights))
     train_flights.sort()
     test_flights.sort()
@@ -31,19 +34,17 @@ if __name__ == '__main__':
     fts_train, fts_test = SplitStrList(fts, test_flights)
     wcs_train, wcs_test = SplitStrList(wcs, test_flights)
 
-    train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), dev)
-
     print('test flights:\n{}'.format(test_flights))
     df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
     df_testfiles.to_csv('test_flight_samples.txt')
 
-
-    train_dl = DataLoader(train_dataset, collate_fn=None, batch_size=1, num_workers=4, shuffle=False, drop_last=True)
+    train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
+    train_dl = DataLoader(train_dataset, collate_fn=None, batch_size=1, num_workers=8, pin_memory=True, shuffle=False, drop_last=True)
     # train_model
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     model = CONV_LSTM(paradigm=paradigms[1], device=dev)
     # set training epochs and train
-    epochs = 1000
+    epochs = 100
     sttime = datetime.now()
 
     print('START FIT: {}'.format(sttime))
