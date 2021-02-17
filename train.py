@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 '''
 if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
-    dev = 'cuda:0'
+    dev = 'cuda:1'
     # dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/' # TEST DATA
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     df_testfiles.to_csv('test_flight_samples.txt')
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
-    train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=1, num_workers=8, pin_memory=True, shuffle=False, drop_last=True)
+    train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=2, num_workers=8, pin_memory=True, shuffle=False, drop_last=True)
     # train_model
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     model = CONV_LSTM(paradigm=paradigms[1], device=dev)

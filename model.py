@@ -37,7 +37,7 @@ class CONV_LSTM(nn.Module):
         ################################################################
         # LSTM model
         # concatenate flight trajectory input with weather features
-        self.lstm = nn.LSTM(self.lstm_input, self.lstm_hidden)
+        self.lstm = nn.LSTM(self.lstm_input, self.lstm_hidden, batch_first=True)
         self.linear = nn.Linear(self.lstm_hidden, self.lstm_output)
         # initiate LSTM hidden cell with 0
         self.hidden_cell = (torch.zeros(1, 1, self.lstm_hidden), torch.zeros(1, 1, self.lstm_hidden))
@@ -61,7 +61,8 @@ class CONV_LSTM(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
-        x_conv_1 = F.relu(self.conv_1(x_w))
+
+        x_conv_1 = F.relu(self.conv_1(x_w.view(-1,1,20,20)))
         x_conv_2 = F.relu(self.conv_2(x_conv_1))
 
         # Flatten the convolution layer output
@@ -74,17 +75,18 @@ class CONV_LSTM(nn.Module):
 
         #############################################################
         # input_seq = flight trajectory data + weather features
-        lstm_input_seq = torch.cat((x_fc_2.detach().view(-1, 4), x_t.view(-1, 2)), 1)
+        # shape: [batch_size, seq_len, features] - note: batch_first=True
+        lstm_input_seq = torch.cat((x_fc_2.detach().view(x_t.size(0),-1, 4), x_t), -1)
 
         # feed input_seq into LSTM model
         # if self.device.__contains__('cuda'):
         #     lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1).cuda(self.device),
         #                                           self.hidden_cell)
         # else:
-        lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1), self.hidden_cell)
+        lstm_out, self.hidden_cell = self.lstm(lstm_input_seq, self.hidden_cell)
 
         # TODO: Dimension expansion (eq. 2l in Pang, Xu, Liu)
-        predictions = self.linear(lstm_out.view(len(lstm_input_seq), -1))
+        predictions = self.linear(lstm_out)
         # expansion = F.relu(self.fc_exp(predictions))
         # print(predictions)
         return predictions
@@ -122,7 +124,7 @@ class CONV_LSTM(nn.Module):
                         self.hidden_cell = (
                             lat.repeat(1, 1, self.lstm_hidden),
                             lon.repeat(1, 1, self.lstm_hidden))
-                        y_pred = self(wc[:pt + 1].reshape((-1, 1, 20, 20)), fp[:pt + 1])
+                        y_pred = self(wc[:pt + 1], fp[:pt + 1])
                         # print(y_pred)
                         single_loss = self.loss_function(y_pred, ft[:pt + 1].view(-1, 2))
                         if batch_idx < len(flight_data) - 1 and pt % 50 == 0:
@@ -132,17 +134,17 @@ class CONV_LSTM(nn.Module):
                             losses = torch.cat((losses, single_loss.view(-1)))
                 elif self.paradigm == 'Seq2Seq':
                     self.optimizer.zero_grad()
-                    # iterate LSTM passes for batch size
-                    #TODO: NOT ITERATE
-                    for i in range(len(fp)):
-                        self.hidden_cell = (
-                            torch.repeat_interleave(fp[0, 0, 0], self.lstm_hidden).view(1, 1, self.lstm_hidden),
-                            torch.repeat_interleave(fp[0, 0, 1], self.lstm_hidden).view(1, 1, self.lstm_hidden))
-                        y_pred = self(wc.reshape((-1, 1, 20, 20)), fp[:])
-                        single_loss = self.loss_function(y_pred, ft[:].view(-1, 2))
-                        losses[batch_idx] = single_loss.view(-1)
-                        single_loss.backward()
-                        self.optimizer.step()
+
+                    # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
+                    self.hidden_cell = (
+                        torch.repeat_interleave(fp[:, 0, 0], self.lstm_hidden).view(1, -1, self.lstm_hidden),
+                        torch.repeat_interleave(fp[:, 0, 1], self.lstm_hidden).view(1, -1, self.lstm_hidden))
+
+                    y_pred = self(wc, fp[:])
+                    single_loss = self.loss_function(y_pred, ft[:])
+                    losses[batch_idx] = single_loss.view(-1)
+                    single_loss.backward()
+                    self.optimizer.step()
                 if batch_idx == len(flight_data) - 1:
                     epoch_losses[ep] = torch.mean(losses).view(-1)
 
