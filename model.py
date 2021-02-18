@@ -67,7 +67,6 @@ class CONV_LSTM(nn.Module):
 
         # Flatten the convolution layer output
         x_conv_output = x_conv_2.view(-1, self.conv_output * 9)
-        # print('x_conv_output size:', x_conv_output.size())
         x_fc_1 = F.relu(self.fc1(x_conv_output))
         # Computes the second fully connected layer (activation applied later)
         # Size changes from (1, 256) to (1, 64)
@@ -79,16 +78,10 @@ class CONV_LSTM(nn.Module):
         lstm_input_seq = torch.cat((x_fc_2.detach().view(x_t.size(0),-1, 4), x_t), -1)
 
         # feed input_seq into LSTM model
-        # if self.device.__contains__('cuda'):
-        #     lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1).cuda(self.device),
-        #                                           self.hidden_cell)
-        # else:
         lstm_out, self.hidden_cell = self.lstm(lstm_input_seq, self.hidden_cell)
 
         # TODO: Dimension expansion (eq. 2l in Pang, Xu, Liu)
         predictions = self.linear(lstm_out)
-        # expansion = F.relu(self.fc_exp(predictions))
-        # print(predictions)
         return predictions
 
     def save_model(self, epochs, opt, model_name: str = None):
@@ -106,66 +99,6 @@ class CONV_LSTM(nn.Module):
                 model_path = 'Models/' + name
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict()}, model_path)
 
-    def fit(self, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default'):
-        epoch_losses = torch.zeros(epochs, device=self.device)
-        for ep in tqdm.trange(epochs, desc='epoch', position=0, leave=False):
-            losses = torch.zeros(len(flight_data), device=self.device)
-
-            for batch_idx, (fp, ft, wc) in enumerate(tqdm.tqdm(flight_data, desc='flight', position=1, leave=False)):  # was len(flight_data)
-                # Extract flight plan, flight track, and weather cubes
-                fp= fp[:, :, 1:].cuda(device=self.device, non_blocking=True)
-                ft = ft[:, :, 1:].cuda(device=self.device, non_blocking=True)
-                wc = wc.cuda(device=self.device, non_blocking=True)
-                if self.paradigm == 'Regression':
-                    print("\nFlight {}/{}: ".format(batch_idx + 1, len(flight_data)) + str(len(fp)) + " points")
-                    for pt in tqdm.trange(len(wc)):
-                        self.optimizer.zero_grad()
-                        lat, lon = fp[0][0].clone().detach(), fp[0][1].clone().detach()
-                        self.hidden_cell = (
-                            lat.repeat(1, 1, self.lstm_hidden),
-                            lon.repeat(1, 1, self.lstm_hidden))
-                        y_pred = self(wc[:pt + 1], fp[:pt + 1])
-                        # print(y_pred)
-                        single_loss = self.loss_function(y_pred, ft[:pt + 1].view(-1, 2))
-                        if batch_idx < len(flight_data) - 1 and pt % 50 == 0:
-                            single_loss.backward()
-                            self.optimizer.step()
-                        if batch_idx == len(flight_data) - 1:
-                            losses = torch.cat((losses, single_loss.view(-1)))
-                elif self.paradigm == 'Seq2Seq':
-                    self.optimizer.zero_grad()
-
-                    # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
-                    self.hidden_cell = (
-                        torch.repeat_interleave(fp[:, 0, 0], self.lstm_hidden).view(1, -1, self.lstm_hidden),
-                        torch.repeat_interleave(fp[:, 0, 1], self.lstm_hidden).view(1, -1, self.lstm_hidden))
-
-                    y_pred = self(wc, fp[:])
-                    single_loss = self.loss_function(y_pred, ft[:])
-                    losses[batch_idx] = single_loss.view(-1)
-                    single_loss.backward()
-                    self.optimizer.step()
-                if batch_idx == len(flight_data) - 1:
-                    epoch_losses[ep] = torch.mean(losses).view(-1)
-
-                if ep % 10 == 0:
-                    if self.device.__contains__('cuda'):
-                        losses = losses.cpu()
-                    plt.plot(losses.detach().numpy())
-                    plt.title('Training (Epoch {})'.format(ep + 1))
-                    plt.xlabel('Flight')
-                    plt.ylabel('Loss (MSE)')
-                    # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
-                    plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
-                    plt.close()
-
-        if self.device.__contains__('cuda'):
-            epoch_losses = epoch_losses.cpu()
-        plt.plot(epoch_losses.detach().numpy())
-        plt.title('Avg Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Avg Loss (MSE)')
-        plt.savefig('Initialized Plots/Model Eval.png',dpi=300)
 
     def evaluate(self, flight_data: torch.utils.data.DataLoader, flights_sampled: list):
 
