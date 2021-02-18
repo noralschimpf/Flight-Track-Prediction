@@ -19,15 +19,17 @@ from torch.utils.data import DataLoader
 '''
 def main():
     torch.multiprocessing.set_start_method('spawn')
+
+    # training params
+    epochs = 5
+    bs = 1
+    paradigms = {0: 'Regression', 1: 'Seq2Seq'}
+
     dev = 'cuda:1'
     # dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/' # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
-
-    epochs = 2
-    bs = 2
-    paradigms = {0: 'Regression', 1: 'Seq2Seq'}
 
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
 
@@ -47,19 +49,13 @@ def main():
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
     train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=8, pin_memory=True, shuffle=False, drop_last=True)
+
     # train_model
     model = CONV_LSTM(paradigm=paradigms[1], device=dev)
-    # set training epochs and train
-
     sttime = datetime.now()
-
     print('START FIT: {}'.format(sttime))
     fit(model, train_dl, epochs, train_flights)
-
-
-
-    model.save_model(opt='Adam', epochs=epochs)
-
+    model.save_model(opt='Adam', epochs=epochs, batch_size=bs)
     edtime = datetime.now()
     print('DONE: {}'.format(edtime - sttime))
 
@@ -122,7 +118,14 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
 
     if mdl.device.__contains__('cuda'):
         epoch_losses = epoch_losses.cpu()
-    plt.plot(epoch_losses.detach().numpy())
+    e_losses = epoch_losses.detach().numpy()
+    plt.plot(e_losses)
+    plt.title('Avg Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Avg Loss (MSE)')
+    plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+
+    plt.plot(e_losses[3:])
     plt.title('Avg Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Avg Loss (MSE)')

@@ -61,7 +61,7 @@ class CONV_LSTM(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
-        x_conv_1 = F.relu(self.conv_1(x_w))
+        x_conv_1 = F.relu(self.conv_1(x_w.view(-1,1,20,20)))
         x_conv_2 = F.relu(self.conv_2(x_conv_1))
 
         # Flatten the convolution layer output
@@ -83,11 +83,11 @@ class CONV_LSTM(nn.Module):
         predictions = self.linear(lstm_out)
         return predictions
 
-    def save_model(self, epochs, opt, model_name: str = None):
+    def save_model(self, epochs, opt, batch_size: str, model_name: str = None):
         if model_name == None:
-            model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
-                                                                               self.lstm_input, self.lstm_hidden,
-                                                                               self.lstm_output)
+            model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
+                                                                               batch_size, self.lstm_input,
+                                                                              self.lstm_hidden, self.lstm_output)
         model_path = 'Models/' + model_name
         while os.path.isfile(model_path):
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
@@ -114,7 +114,7 @@ class CONV_LSTM(nn.Module):
                 for pt in tqdm.trange(len(wc)):
                     test_dataset = [wc[i], fp[i], ft[i]]
                     self.optimizer.zero_grad()
-                    self.hidden_cell(torch.zeros(1, 1, self.lstm_hidden),
+                    self.hidden_cell = (torch.zeros(1, 1, self.lstm_hidden),
                                      torch.zeros(1, 1, self.lstm_hidden))
                     y_pred = self(wc[pt].reshape((1, 1, 20, 20)), fp[pt][1:])
                     single_loss = self.loss_function(y_pred, ft[i][1:].view(-1, 2)).long().detach().numpy()
