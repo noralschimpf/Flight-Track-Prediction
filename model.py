@@ -61,8 +61,7 @@ class CONV_LSTM(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
-
-        x_conv_1 = F.relu(self.conv_1(x_w.view(-1,1,20,20)))
+        x_conv_1 = F.relu(self.conv_1(x_w))
         x_conv_2 = F.relu(self.conv_2(x_conv_1))
 
         # Flatten the convolution layer output
