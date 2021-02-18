@@ -75,7 +75,7 @@ class CONV_LSTM(nn.Module):
         #############################################################
         # input_seq = flight trajectory data + weather features
         # shape: [batch_size, seq_len, features] - note: batch_first=True
-        lstm_input_seq = torch.cat((x_fc_2.detach().view(x_t.size(0),-1, 4), x_t), -1)
+        lstm_input_seq = torch.cat((x_fc_2.view(x_t.size(0),-1, 4), x_t), -1)
 
         # feed input_seq into LSTM model
         lstm_out, self.hidden_cell = self.lstm(lstm_input_seq, self.hidden_cell)
