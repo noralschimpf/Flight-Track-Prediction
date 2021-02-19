@@ -21,7 +21,7 @@ def main():
     torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 5
+    epochs = 500
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
 
@@ -125,11 +125,13 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
     plt.ylabel('Avg Loss (MSE)')
     plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
 
-    plt.plot(e_losses[3:])
+    plt.plot(e_losses[:])
     plt.title('Avg Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Avg Loss (MSE)')
-    plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+    plt.ylim([0,1])
+    plt.yticks(np.linspace(0,1,11))
+    plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
 
 if __name__== '__main__':
     main()
