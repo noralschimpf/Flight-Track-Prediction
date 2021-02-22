@@ -21,7 +21,7 @@ def main():
     torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 1
+    epochs = 500
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
 
