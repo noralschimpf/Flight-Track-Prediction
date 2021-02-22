@@ -1,5 +1,5 @@
 import torch
-import numpy as np
+import os, shutil
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -7,7 +7,7 @@ import tqdm
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
 from custom_dataset import ToTensor
-from model import CONV_LSTM
+from model import CONV_LSTM, CONV_GRU
 from torch.utils.data import DataLoader
 
 # TODO: BATCH FLIGHTS
@@ -21,7 +21,7 @@ def main():
     torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 500
+    epochs = 1
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
 
@@ -31,36 +31,70 @@ def main():
     root_dir = 'data/' # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 
-    fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
 
+    # Uncomment block if generating valid file & split files
+    fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
     total_flights = len(fps)
     train_flights = np.random.choice(total_flights, int(total_flights * .75), replace=False)
     test_flights = list(set(range(len(fps))) - set(train_flights))
     train_flights.sort()
     test_flights.sort()
-
+    
     fps_train, fps_test = SplitStrList(fps, test_flights)
     fts_train, fts_test = SplitStrList(fts, test_flights)
     wcs_train, wcs_test = SplitStrList(wcs, test_flights)
 
     print('test flights:\n{}'.format(test_flights))
+    df_trainfiles = pd.DataFrame(data={'flight plans': fps_train, 'flight tracks': fts_train, 'weather cubes': wcs_train})
     df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
+    df_trainfiles.to_csv('train_flight_samples.txt')
     df_testfiles.to_csv('test_flight_samples.txt')
+
+
+    '''
+    # Uncomment block if validated & split files already exist
+    df_trainfiles = pd.read_csv('train_flight_samples.txt')
+    print('Loading Train Files')
+    fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
+    with df_trainfiles as df:
+        fps_train, fts_train = df['flight plans'].values, df['flight tracks'].values
+        wcs_train, train_flights = df['weather cubes'].values, list(range(len(fps_train)))
+    #TODO: eliminate train_flights    
+    '''
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
     train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=8, pin_memory=True, shuffle=False, drop_last=True)
 
     # train_model
-    model = CONV_LSTM(paradigm=paradigms[1], device=dev)
-    sttime = datetime.now()
-    print('START FIT: {}'.format(sttime))
-    fit(model, train_dl, epochs, train_flights)
-    model.save_model(opt='Adam', epochs=epochs, batch_size=bs)
-    edtime = datetime.now()
-    print('DONE: {}'.format(edtime - sttime))
+    model_lstm = CONV_LSTM(paradigm=paradigms[1], device=dev)
+    model_gru = CONV_GRU(paradigm=paradigms[1], device=dev)
+    mdl_recurrence = ['lstm','gru']
+    mdls = [model_lstm, model_gru]
+    mdl_names = ['cnn-lstm-adam-{}epochs'.format(epochs), 'cnn-gru-adam-{}epochs'.format(epochs)]
+    for i in range(len(mdls)):
+        sttime = datetime.now()
+        print('START FIT: {}'.format(sttime))
+        fit(mdls[i], train_dl, epochs, train_flights, recurrence=mdl_recurrence[i])
+        mdls[i].save_model(opt='Adam', epochs=epochs, batch_size=bs)
+        edtime = datetime.now()
+        print('DONE: {}'.format(edtime - sttime))
+
+        if not os.path.isdir('Initialized Plots/{}'.format(mdl_names[i])):
+            os.mkdir('Initialized Plots/{}'.format(mdl_names[i]))
+        plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
+        for plot in plots_to_move:
+            shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdl_names[i], plot))
+
+        if not os.path.isdir('Models/{}'.format(mdl_names[i])):
+            os.mkdir('Models/{}'.format(mdl_names[i]))
+        shutil.copy('test_flight_samples.txt','Models/{}/test_flight_samples.txt'.format(mdl_names[i]))
+        shutil.copy('train_flight_samples.txt','Models/{}/train_flight_samples.txt'.format(mdl_names[i]))
+        shutil.move('model_epoch_losses.txt','Models/{}/model_epoch_losses.txt'.format(mdl_names[i]))
 
 
-def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default'):
+
+
+def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default', recurrence: str = 'lstm'):
     epoch_losses = torch.zeros(epochs, device=mdl.device)
     for ep in tqdm.trange(epochs, desc='epoch', position=0, leave=False):
         losses = torch.zeros(len(flight_data), device=mdl.device)
@@ -78,9 +112,12 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
                 for pt in tqdm.trange(len(wc)):
                     mdl.optimizer.zero_grad()
                     lat, lon = fp[0][0].clone().detach(), fp[0][1].clone().detach()
-                    mdl.hidden_cell = (
-                        lat.repeat(1, 1, mdl.lstm_hidden),
-                        lon.repeat(1, 1, mdl.lstm_hidden))
+                    if recurrence == 'lstm':
+                        mdl.hidden_cell = (
+                            lat.repeat(1, 1, mdl.lstm_hidden),
+                            lon.repeat(1, 1, mdl.lstm_hidden))
+                    elif recurrence == 'gru':
+                        mdl.hidden_cell = torch.cat(lat.repeat(1,1,mdl.gru_hidden/2), lon.repeat(1,1,mdl.gru_hidden/2))
                     y_pred = mdl(wc[:pt + 1], fp[:pt + 1])
                     # print(y_pred)
                     single_loss = mdl.loss_function(y_pred, ft[:pt + 1].view(-1, 2))
@@ -93,10 +130,15 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
                 mdl.optimizer.zero_grad()
 
                 # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
-                mdl.hidden_cell = (
-                    torch.repeat_interleave(fp[:, 0, 0], mdl.lstm_hidden).view(1, -1, mdl.lstm_hidden),
-                    torch.repeat_interleave(fp[:, 0, 1], mdl.lstm_hidden).view(1, -1, mdl.lstm_hidden))
-
+                if recurrence == 'lstm':
+                    mdl.hidden_cell = (
+                        torch.repeat_interleave(fp[:, 0, 0], mdl.lstm_hidden).view(1, -1, mdl.lstm_hidden),
+                        torch.repeat_interleave(fp[:, 0, 1], mdl.lstm_hidden).view(1, -1, mdl.lstm_hidden))
+                elif recurrence == 'gru':
+                    mdl.hidden_cell = torch.hstack((
+                        torch.repeat_interleave(fp[:,0,0],int(mdl.gru_hidden/2)),
+                        torch.repeat_interleave(fp[:,0,1],int(mdl.gru_hidden/2))
+                    )).view(1,-1,int(mdl.gru_hidden))
                 y_pred = mdl(wc, fp[:])
                 single_loss = mdl.loss_function(y_pred, ft[:])
                 losses[batch_idx] = single_loss.view(-1)
@@ -105,16 +147,16 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
             if batch_idx == len(flight_data) - 1:
                 epoch_losses[ep] = torch.mean(losses).view(-1)
 
-            if ep % 10 == 0:
-                if mdl.device.__contains__('cuda'):
-                    losses = losses.cpu()
-                plt.plot(losses.detach().numpy())
-                plt.title('Training (Epoch {})'.format(ep + 1))
-                plt.xlabel('Flight')
-                plt.ylabel('Loss (MSE)')
-                # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
-                plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
-                plt.close()
+        if ep % 10 == 0:
+            if mdl.device.__contains__('cuda'):
+                losses = losses.cpu()
+            plt.plot(losses.detach().numpy())
+            plt.title('Training (Epoch {})'.format(ep + 1))
+            plt.xlabel('Flight')
+            plt.ylabel('Loss (MSE)')
+            # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
+            plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
+            plt.close()
 
     if mdl.device.__contains__('cuda'):
         epoch_losses = epoch_losses.cpu()
@@ -124,14 +166,19 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
     plt.xlabel('Epoch')
     plt.ylabel('Avg Loss (MSE)')
     plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+    plt.close()
 
     plt.plot(e_losses[:])
     plt.title('Avg Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Avg Loss (MSE)')
-    plt.ylim([0,1])
+    plt.ylim([0,.1])
     plt.yticks(np.linspace(0,1,11))
     plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
+    plt.close()
+
+    df_eloss = pd.DataFrame({'loss': e_losses})
+    df_eloss.to_csv('model_epoch_losses.txt')
 
 if __name__== '__main__':
     main()

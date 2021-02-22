@@ -238,11 +238,11 @@ class CONV_GRU(nn.Module):
         predictions = self.linear(gru_out)
         return predictions
 
-    def save_model(self, epochs, opt, model_name: str = None):
+    def save_model(self, epochs, opt, batch_size: str, model_name: str = None):
         if model_name == None:
-            model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
-                                                                               self.lstm_input, self.lstm_hidden,
-                                                                               self.lstm_output)
+            model_name = 'CONV-GRU-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
+                                                                               batch_size, self.gru_input,
+                                                                              self.gru_hidden, self.gru_output)
         model_path = 'Models/' + model_name
         while os.path.isfile(model_path):
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
