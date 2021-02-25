@@ -33,6 +33,7 @@ def main():
     root_dir = 'data/'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 
+    '''
     # Uncomment block if generating valid file & split files
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
     total_flights = len(fps)
@@ -51,17 +52,16 @@ def main():
     df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
     df_trainfiles.to_csv('train_flight_samples.txt')
     df_testfiles.to_csv('test_flight_samples.txt')
-
     '''
+
     # Uncomment block if validated & split files already exist
     df_trainfiles = pd.read_csv('train_flight_samples.txt')
     print('Loading Train Files')
     fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
-    with df_trainfiles as df:
-        fps_train, fts_train = df['flight plans'].values, df['flight tracks'].values
-        wcs_train, train_flights = df['weather cubes'].values, list(range(len(fps_train)))
+    fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
+    wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
     #TODO: eliminate train_flights    
-    '''
+
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
     train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=8, pin_memory=True,
@@ -72,26 +72,24 @@ def main():
     model_gru = CONV_GRU(paradigm=paradigms[1], device=dev)
     mdl_recurrence = ['lstm', 'gru']
     mdls = [model_lstm, model_gru]
-    mdl_names = ['cnn-lstm-adam-{}epochs'.format(epochs), 'cnn-gru-adam-{}epochs'.format(epochs)]
+
     for i in range(len(mdls)):
         sttime = datetime.now()
         print('START FIT: {}'.format(sttime))
         fit(mdls[i], train_dl, epochs, train_flights, recurrence=mdl_recurrence[i])
-        mdls[i].save_model(opt='Adam', epochs=epochs, batch_size=bs)
+        mdls[i].save_model(epochs=epochs, batch_size=bs)
         edtime = datetime.now()
         print('DONE: {}'.format(edtime - sttime))
 
-        if not os.path.isdir('Initialized Plots/{}'.format(mdl_names[i])):
-            os.mkdir('Initialized Plots/{}'.format(mdl_names[i]))
+        if not os.path.isdir('Initialized Plots/{}'.format(mdls[i].model_name(epochs))):
+            os.mkdir('Initialized Plots/{}'.format(mdls[i].model_name(epochs)))
         plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
         for plot in plots_to_move:
-            shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdl_names[i], plot))
+            shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdls[i].model_name(epochs), plot))
 
-        if not os.path.isdir('Models/{}'.format(mdl_names[i])):
-            os.mkdir('Models/{}'.format(mdl_names[i]))
-        shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdl_names[i]))
-        shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdl_names[i]))
-        shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdl_names[i]))
+        shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdls[i].model_name(epochs)))
+        shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdls[i].model_name(epochs)))
+        shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdls[i].model_name(epochs)))
 
 
 def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',
