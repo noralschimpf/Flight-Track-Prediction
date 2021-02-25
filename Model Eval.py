@@ -17,8 +17,10 @@ dev = 'cuda:1'
 mdl = load_model('Models/CONV-LSTM-OPTAdam-LOSSMSELoss()-EPOCHS20-LSTM6_100_2')
 df_test = pd.read_csv('test_flight_samples.txt')
 fp_test, ft_test, wc_test = df_test['flight plans'].to_list(), df_test['flight tracks'].to_list(), df_test['weather cubes'].to_list()
-flight_data = CustomDataset(root_dir=root, abspath_fp=fp_test, abspath_ft=ft_test, abspath_wc=wc_test, transform=ToTensor(), device='cpu')
-test_flights = torch.utils.data.DataLoader(flight_data, collate_fn=None, batch_size=1, num_workers=8, pin_memory=True, shuffle=False, drop_last=True)
+flight_data = CustomDataset(root_dir=root, abspath_fp=fp_test, abspath_ft=ft_test, abspath_wc=wc_test,
+                            transform=ToTensor(), device='cpu')
+test_flights = torch.utils.data.DataLoader(flight_data, collate_fn=pad_batch, batch_size=1, num_workers=8,
+                                           pin_memory=True, shuffle=False, drop_last=True)
 
 # begin validation
 flight_losses = torch.zeros(len(test_flights))
