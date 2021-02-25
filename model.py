@@ -48,7 +48,8 @@ class CONV_LSTM(nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         self.loss_function = nn.MSELoss()
 
-        self.struct_dict = {'device': self.device, 'paradigm': self.paradigm,
+        self.struct_dict = {'class': str(self.__class__).split('\'')[1],
+                            'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
                             'conv_output': self.conv_output,
                             'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
@@ -209,7 +210,7 @@ class CONV_GRU(nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         self.loss_function = nn.MSELoss()
 
-        self.struct_dict = {'device': self.device, 'paradigm': self.paradigm,
+        self.struct_dict = {'class': str(self.__class__).split('\'')[1], 'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
                             'conv_output': self.conv_output,
                             'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
@@ -272,11 +273,17 @@ def load_model(model_path: str):
     dicts = torch.load(model_path)
     struct = dicts['struct_dict']
     state_dict = dicts['state_dict']
-    mdl = CONV_LSTM(paradigm=struct['paradigm'],
-                    conv_input=struct['conv_input'], conv_hidden=struct['conv_hidden'],
-                    conv_output=struct['conv_output'],
-                    dense_hidden=struct['dense_hidden'], dense_output=struct['dense_output'],
-                    lstm_input=struct['lstm_input'], lstm_hidden=struct['lstm_hidden'],
-                    lstm_output=struct['lstm_output'], device=struct['device'])
+    if struct['class'] == 'model.CONV_LSTM':
+        mdl = CONV_LSTM(paradigm=struct['paradigm'],
+                        conv_input=struct['conv_input'], conv_hidden=struct['conv_hidden'],
+                        conv_output=struct['conv_output'],
+                        dense_hidden=struct['dense_hidden'], dense_output=struct['dense_output'],
+                        lstm_input=struct['lstm_input'], lstm_hidden=struct['lstm_hidden'],
+                        lstm_output=struct['lstm_output'], device=struct['device'])
+    elif struct['class'] == 'model.CONV_GRU':
+        mdl = CONV_GRU(paradigm=struct['paradigm'], device=struct['device'],
+                       conv_input=struct['conv_input'], conv_hidden=struct['conv_hidden'], conv_output=struct['conv_output'],
+                       dense_hidden=struct['dense_hidden'], dense_output=struct['dense_output'],
+                       gru_input=struct['gru_input'], gru_hidden=struct['gru_hidden'], gru_output=struct['gru_output'])
     mdl.load_state_dict(state_dict)
     return (mdl)
