@@ -161,7 +161,7 @@ class CONV_LSTM(nn.Module):
 
     def model_name(self, epochs: int = 500, batch_size: int = 1):
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
-        model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-GRU{}_{}_{}'.format(opt, self.loss_function, epochs,
+        model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
                                                                                   batch_size, self.lstm_input,
                                                                                   self.lstm_hidden, self.lstm_output)
         return model_name
