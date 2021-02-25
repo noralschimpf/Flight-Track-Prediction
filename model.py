@@ -83,12 +83,10 @@ class CONV_LSTM(nn.Module):
         predictions = self.linear(lstm_out)
         return predictions
 
-    def save_model(self, epochs, opt, batch_size: str, model_name: str = None):
+    def save_model(self, epochs, batch_size: str, model_name: str = None):
         if model_name == None:
-            model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
-                                                                               batch_size, self.lstm_input,
-                                                                              self.lstm_hidden, self.lstm_output)
-        model_path = 'Models/' + model_name
+            model_name = self.model_name(epochs=epochs, batch_size=batch_size)
+        model_path = 'Models/{}/{}'.format(model_name, model_name)
         while os.path.isfile(model_path):
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
             if choice == '1':
@@ -96,6 +94,8 @@ class CONV_LSTM(nn.Module):
             elif choice == '2':
                 name = input("Enter model name\n")
                 model_path = 'Models/' + name
+        if not os.path.isdir('Models/{}'.format(model_name)):
+            os.mkdir('Models/{}'.format(model_name))
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict()}, model_path)
 
 
@@ -158,6 +158,13 @@ class CONV_LSTM(nn.Module):
             plt.xlabel('flights')
             plt.ylabel('Error (MSE)')
             plt.close()
+
+    def model_name(self, epochs: int = 500, batch_size: int = 1):
+        opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
+        model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-GRU{}_{}_{}'.format(opt, self.loss_function, epochs,
+                                                                                  batch_size, self.lstm_input,
+                                                                                  self.lstm_hidden, self.lstm_output)
+        return model_name
 
 
 
@@ -238,12 +245,10 @@ class CONV_GRU(nn.Module):
         predictions = self.linear(gru_out)
         return predictions
 
-    def save_model(self, epochs, opt, batch_size: str, model_name: str = None):
+    def save_model(self, epochs, batch_size: str, model_name: str = None):
         if model_name == None:
-            model_name = 'CONV-GRU-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
-                                                                               batch_size, self.gru_input,
-                                                                              self.gru_hidden, self.gru_output)
-        model_path = 'Models/' + model_name
+            model_name = self.model_name(epochs=epochs, batch_size=batch_size)
+        model_path = 'Models/{}/{}'.format(model_name, model_name)
         while os.path.isfile(model_path):
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
             if choice == '1':
@@ -251,7 +256,17 @@ class CONV_GRU(nn.Module):
             elif choice == '2':
                 name = input("Enter model name\n")
                 model_path = 'Models/' + name
+        if not os.path.isdir('Models/{}'.format(model_name)):
+            os.mkdir('Models/{}'.format(model_name))
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict()}, model_path)
+
+    def model_name(self, epochs: int = 500, batch_size: int = 1):
+        opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
+        model_name = 'CONV-GRU-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-GRU{}_{}_{}'.format(opt, self.loss_function, epochs,
+                                                                                  batch_size, self.gru_input,
+                                                                                  self.gru_hidden, self.gru_output)
+        return model_name
+
 
 def load_model(model_path: str):
     dicts = torch.load(model_path)
