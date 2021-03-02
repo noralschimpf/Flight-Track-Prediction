@@ -1,18 +1,19 @@
 from sklearn.preprocessing import MinMaxScaler
 from netCDF4 import Dataset
 import numpy as np
+import tqdm
 import os
 
 
 def main():
 
-    sample_file = 'F:/Aircraft-Data/Weather Cubes/2018-11-01/Flight_Plan_KJFK_KLAX_AAL1.nc'
-    PATH_PROJ = 'D:\\NathanSchimpf\\Aircraft-Data\\TorchDir'
+    # sample_file = 'F:/Aircraft-Data/Weather Cubes/2018-11-01/Flight_Plan_KJFK_KLAX_AAL1.nc'
+    PATH_PROJ = 'F:\\Aircraft-Data\\TorchDir'
     PATH_FP = os.path.join(PATH_PROJ, 'IFF_Flight_Plans/Sorted')
     PATH_TP = os.path.join(PATH_PROJ, 'IFF_Track_Points/Sorted')
     PATH_WC = os.path.join(PATH_PROJ, 'Weather Cubes')
-    filename = '../../WeatherPreProcessing/utils/Data_MinMax.csv'
-    abs_filepath = os.path.join(os.path.abspath('../../WeatherPreProcessing/utils'), filename)
+    filename = 'Data_MinMax.csv'
+    abs_filepath = os.path.join(os.path.abspath('.'), filename)
 
     if os.path.isfile(abs_filepath):
         print('{} already exists: skip to writing....'.format(abs_filepath))
@@ -20,8 +21,7 @@ def main():
         nda_minmax = np.empty((6,0))
         # For every Weather Cube, Log the Minimum/Maximum latitude, longitude, echo top
         wc_dates = [x for x in os.listdir(PATH_WC) if os.path.isdir(os.path.join(PATH_WC, x))]
-        for dir in wc_dates:
-            print('Reading Weather Cubes form {}'.format(dir))
+        for dir in tqdm.tqdm(wc_dates):
             files = [y for y in os.listdir(os.path.join(PATH_WC, dir)) if y.__contains__('.nc')]
             for wc in files:
                 wc_abspath = os.path.join(PATH_WC, dir, wc)
@@ -36,8 +36,7 @@ def main():
 
         # for every flight plan, Log the Minimum/Maximum latitude, longitude, altitude
         fp_dates = [x for x in os.listdir(PATH_FP) if os.path.isdir(os.path.join(PATH_FP, x))]
-        for dir in fp_dates:
-            print('Reading Flight Plans from {}'.format(dir))
+        for dir in tqdm.tqdm(fp_dates):
             files = [y for y in os.listdir(os.path.join(PATH_FP, dir)) if y.__contains__('.txt')]
             for fp in files:
                 fp_abspath = os.path.join(PATH_FP, dir, fp)
@@ -51,8 +50,7 @@ def main():
 
         # for every flight track, Log the Minimum/Maximum latitude, longitude, altitude
         tp_dates = [x for x in os.listdir(PATH_TP) if os.path.isdir(os.path.join(PATH_TP, x))]
-        for dir in tp_dates:
-            print('Reading Trajectories from {}'.format(dir))
+        for dir in tqdm.tqdm(tp_dates):
             files = [y for y in os.listdir(os.path.join(PATH_TP, dir)) if y.__contains__('.txt')]
             for tp in files:
                 tp_abspath = os.path.join(PATH_TP, dir, tp)
@@ -68,25 +66,23 @@ def main():
         print('Saving Metadata to CSV')
         np.savetxt(abs_filepath, nda_minmax, fmt='%f', delimiter=',', newline='\n')
 
+
     print('Generating MinMaxScalers')
     nda_minmax = np.genfromtxt(abs_filepath, delimiter=',')
-    lat_min, lon_min, alt_min = nda_minmax[0,:].min(),nda_minmax[1,:].min(), nda_minmax[2,:].min()
-    lat_max, lon_max, alt_max = nda_minmax[0,:].max(), nda_minmax[1,:].max(), nda_minmax[2,:].max()
-
+    nda_minmax = nda_minmax.reshape(3,-1)
 
     # Create MinMax Scaler using overall parameters
     lat_scaler = MinMaxScaler(feature_range=[0,1])
     lon_scaler = MinMaxScaler(feature_range=[0,1])
     alt_scaler = MinMaxScaler(feature_range=[0,1])
-    lat_scaler.fit(np.array(([lat_min, lat_max])).reshape(-1,1))
-    lon_scaler.fit(np.array(([lon_min, lon_max])).reshape(-1,1))
-    alt_scaler.fit(np.array(([alt_min, alt_max])).reshape(-1,1))
+    lat_scaler.fit(nda_minmax[0,:].reshape(-1,1))
+    lon_scaler.fit(nda_minmax[1,:].reshape(-1,1))
+    alt_scaler.fit(nda_minmax[2,:].reshape(-1,1))
 
 
     # Scale every Flight Plan
     fp_dates = [x for x in os.listdir(PATH_FP) if os.path.isdir(os.path.join(PATH_FP, x))]
-    for dir in fp_dates:
-        print('Scaling Flight Plans from {}'.format(dir))
+    for dir in tqdm.tqdm(fp_dates, desc='scaling flight plans'):
         files = [y for y in os.listdir(os.path.join(PATH_FP, dir)) if y.__contains__('.txt')]
         for fp in files:
             fp_abspath = os.path.join(PATH_FP, dir, fp)
@@ -100,8 +96,7 @@ def main():
 
     # Scale every Flight Track
     tp_dates = [x for x in os.listdir(PATH_TP) if os.path.isdir(os.path.join(PATH_TP, x))]
-    for dir in tp_dates:
-        print('Scaling Trajectories from {}'.format(dir))
+    for dir in tqdm.tqdm(tp_dates, desc='scaling trajectories'):
         files = [y for y in os.listdir(os.path.join(PATH_TP, dir)) if y.__contains__('.txt')]
         for tp in files:
             tp_abspath = os.path.join(PATH_TP, dir, tp)
@@ -115,8 +110,7 @@ def main():
 
     # Scale every Weather Cube
     wc_dates = [x for x in os.listdir(PATH_WC) if os.path.isdir(os.path.join(PATH_WC, x))]
-    for dir in wc_dates:
-        print('Scaling Weather Cubes from {}'.format(dir))
+    for dir in tqdm.tqdm(wc_dates, desc='scaling weather cubes'):
         files = [y for y in os.listdir(os.path.join(PATH_WC, dir)) if y.__contains__('.nc')]
         for wc in files:
             wc_abspath = os.path.join(PATH_WC, dir, wc)
@@ -128,7 +122,6 @@ def main():
             grp.close()
 
     print('Done')
-
 
 
 
