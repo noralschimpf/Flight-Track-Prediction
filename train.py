@@ -20,7 +20,8 @@ from torch.utils.data import DataLoader
 
 
 def main():
-    torch.multiprocessing.set_start_method('spawn')
+    if os.name == 'nt':
+        torch.multiprocessing.set_start_method('spawn')
 
     # training params
     epochs = 500
