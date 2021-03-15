@@ -38,7 +38,8 @@ class CustomDataset(Dataset):
         return fp, ft, wc
 
     def get_flightname(self, idx):
-        flight_desc = '_'.join(self.flight_plan[idx].split('/')[-2:])
+        splitpath = os.path.normpath(self.flight_plan[idx]).split(os.sep)
+        flight_desc = '_'.join(splitpath[-2:])
         return flight_desc
 
 
