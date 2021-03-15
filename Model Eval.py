@@ -2,7 +2,7 @@ import pandas as pd
 import torch
 import tqdm
 import os
-from model import load_model, CONV_LSTM, CONV_GRU
+from libmodels import model, CONV_LSTM, CONV_GRU
 from custom_dataset import CustomDataset, ToTensor, pad_batch
 
 
@@ -18,15 +18,23 @@ def main():
     dev = 'cuda:1'
 
     # open model and data
-    mdl_paths = [os.path.join(os.path.abspath('.'),'Models/{}/{}'.format(x,x)) for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x))]
+    mdl_paths = [os.path.join(os.path.abspath('.'),'Models/{}/{}'.format(x,x)) for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and x.__contains__('EPOCHS')]
     mdl_dirs = ['/'.join(x.split('/')[:-1]) for x in mdl_paths]
     mdls = []
 
     for path in mdl_paths:
-        mdls.append(load_model(path))
+        mdls.append(model.load_model(path))
 
     df_test = pd.read_csv('test_flight_samples.txt')
     fp_test, ft_test, wc_test = df_test['flight plans'].to_list(), df_test['flight tracks'].to_list(), df_test['weather cubes'].to_list()
+
+    '''
+    # ONLY IF TRAINING PERFORMED ON SEPARATE MACHINE
+    for pathlist in [fp_test, ft_test, wc_test]:
+        for i in range(len(pathlist)):
+            pathlist[i] = pathlist[i].replace(pathlist[i][:pathlist[i].index('data')],os.path.abspath('.') + '/')
+    '''
+
     flight_data = CustomDataset(root_dir=root, abspath_fp=fp_test, abspath_ft=ft_test, abspath_wc=wc_test,
                                 transform=ToTensor(), device='cpu')
     test_flights = torch.utils.data.DataLoader(flight_data, collate_fn=pad_batch, batch_size=1, num_workers=8,
