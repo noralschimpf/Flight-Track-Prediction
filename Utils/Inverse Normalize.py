@@ -6,7 +6,7 @@ import tqdm
 
 def inv_norm(path_csv: str, path_data: str):
     # Generate Transforms from MinMax.CSV
-    nda_minmaxes = np.genfromtxt(path_csv,delimiter=',').reshape(6,-1)
+    nda_minmaxes = np.genfromtxt(path_csv,delimiter=',').reshape(3,-1)
 
     lat_scaler = MinMaxScaler()
     lon_scaler = MinMaxScaler()
@@ -15,14 +15,15 @@ def inv_norm(path_csv: str, path_data: str):
     lat_min, lat_max = nda_minmaxes[0,:].min(), nda_minmaxes[0,:].max()
     lon_min, lon_max = nda_minmaxes[1, :].min(), nda_minmaxes[1, :].max()
     alt_min, alt_max = nda_minmaxes[2, :].min(), nda_minmaxes[2, :].max()
+    '''DEPRECATED
     lat_scaler.fit(np.array([lat_min, lat_max]).reshape(-1,1))
     lon_scaler.fit(np.array([lon_min, lon_max]).reshape(-1,1))
-    alt_scaler.fit(np.array([alt_min, alt_max]).reshape(-1,1))
+    alt_scaler.fit(np.array([alt_min, alt_max]).reshape(-1,1))'''
 
-    #TODO: RE-NORMALIZE DATA CORRECTLY
-    '''lat_scaler.fit(nda_minmaxes[0,:].reshape(-1,1))
+    # Correct Norm/Denorm fit
+    lat_scaler.fit(nda_minmaxes[0,:].reshape(-1,1))
     lon_scaler.fit(nda_minmaxes[1,:].reshape(-1,1))
-    alt_scaler.fit(nda_minmaxes[2,:].reshape(-1,1))'''
+    alt_scaler.fit(nda_minmaxes[2,:].reshape(-1,1))
 
     # Inverse Transform each Saved CSV
     if not os.path.isdir('{}/Denormed'.format(path_data)):
