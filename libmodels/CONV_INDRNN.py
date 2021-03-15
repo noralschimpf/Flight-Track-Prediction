@@ -1,13 +1,15 @@
 import torch
 import tqdm
+from IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent
+from IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import os
 
-
 # customized Convolution and LSTM model
-class CONV_LSTM(nn.Module):
+#TODO: Replace LSTM with IndRNN
+class CONV_INDRNN(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
                  dense_output=4, lstm_input=6, lstm_hidden=100, lstm_output=2):
         # conv and lstm input and output parameters can be customized
@@ -37,7 +39,7 @@ class CONV_LSTM(nn.Module):
         ################################################################
         # LSTM model
         # concatenate flight trajectory input with weather features
-        self.lstm = nn.LSTM(self.lstm_input, self.lstm_hidden)
+        self.lstm = nn.LSTM(self.lstm_input, self.lstm_hidden, batch_first=True)
         self.linear = nn.Linear(self.lstm_hidden, self.lstm_output)
         # initiate LSTM hidden cell with 0
         self.hidden_cell = (torch.zeros(1, 1, self.lstm_hidden), torch.zeros(1, 1, self.lstm_hidden))
@@ -48,7 +50,8 @@ class CONV_LSTM(nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         self.loss_function = nn.MSELoss()
 
-        self.struct_dict = {'device': self.device, 'paradigm': self.paradigm,
+        self.struct_dict = {'class': str(self.__class__).split('\'')[1],
+                            'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
                             'conv_output': self.conv_output,
                             'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
@@ -61,12 +64,11 @@ class CONV_LSTM(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
-        x_conv_1 = F.relu(self.conv_1(x_w))
+        x_conv_1 = F.relu(self.conv_1(x_w.view(-1,1,20,20)))
         x_conv_2 = F.relu(self.conv_2(x_conv_1))
 
         # Flatten the convolution layer output
         x_conv_output = x_conv_2.view(-1, self.conv_output * 9)
-        # print('x_conv_output size:', x_conv_output.size())
         x_fc_1 = F.relu(self.fc1(x_conv_output))
         # Computes the second fully connected layer (activation applied later)
         # Size changes from (1, 256) to (1, 64)
@@ -74,27 +76,20 @@ class CONV_LSTM(nn.Module):
 
         #############################################################
         # input_seq = flight trajectory data + weather features
-        lstm_input_seq = torch.cat((x_fc_2.detach().view(-1, 4), x_t.view(-1, 2)), 1)
+        # shape: [batch_size, seq_len, features] - note: batch_first=True
+        lstm_input_seq = torch.cat((x_fc_2.view(x_t.size(0),-1, 4), x_t), -1)
 
         # feed input_seq into LSTM model
-        # if self.device.__contains__('cuda'):
-        #     lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1).cuda(self.device),
-        #                                           self.hidden_cell)
-        # else:
-        lstm_out, self.hidden_cell = self.lstm(lstm_input_seq.view(len(lstm_input_seq), 1, -1), self.hidden_cell)
+        lstm_out, self.hidden_cell = self.lstm(lstm_input_seq, self.hidden_cell)
 
         # TODO: Dimension expansion (eq. 2l in Pang, Xu, Liu)
-        predictions = self.linear(lstm_out.view(len(lstm_input_seq), -1))
-        # expansion = F.relu(self.fc_exp(predictions))
-        # print(predictions)
+        predictions = self.linear(lstm_out)
         return predictions
 
-    def save_model(self, epochs, opt, model_name: str = None):
+    def save_model(self, epochs, batch_size: str, model_name: str = None):
         if model_name == None:
-            model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
-                                                                               self.lstm_input, self.lstm_hidden,
-                                                                               self.lstm_output)
-        model_path = 'Models/' + model_name
+            model_name = self.model_name(epochs=epochs, batch_size=batch_size)
+        model_path = 'Models/{}/{}'.format(model_name, model_name)
         while os.path.isfile(model_path):
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
             if choice == '1':
@@ -102,68 +97,10 @@ class CONV_LSTM(nn.Module):
             elif choice == '2':
                 name = input("Enter model name\n")
                 model_path = 'Models/' + name
+        if not os.path.isdir('Models/{}'.format(model_name)):
+            os.mkdir('Models/{}'.format(model_name))
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict()}, model_path)
 
-    def fit(self, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default'):
-        epoch_losses = torch.zeros(epochs, device=self.device)
-        for ep in tqdm.trange(epochs, desc='epoch', position=0, leave=False):
-            losses = torch.zeros(len(flight_data), device=self.device)
-
-            for batch_idx, (fp, ft, wc) in enumerate(tqdm.tqdm(flight_data, desc='flight', position=1, leave=False)):  # was len(flight_data)
-                # Extract flight plan, flight track, and weather cubes
-                fp= fp[:, :, 1:].cuda(device=self.device, non_blocking=True)
-                ft = ft[:, :, 1:].cuda(device=self.device, non_blocking=True)
-                wc = wc.cuda(device=self.device, non_blocking=True)
-                if self.paradigm == 'Regression':
-                    print("\nFlight {}/{}: ".format(batch_idx + 1, len(flight_data)) + str(len(fp)) + " points")
-                    for pt in tqdm.trange(len(wc)):
-                        self.optimizer.zero_grad()
-                        lat, lon = fp[0][0].clone().detach(), fp[0][1].clone().detach()
-                        self.hidden_cell = (
-                            lat.repeat(1, 1, self.lstm_hidden),
-                            lon.repeat(1, 1, self.lstm_hidden))
-                        y_pred = self(wc[:pt + 1].reshape((-1, 1, 20, 20)), fp[:pt + 1])
-                        # print(y_pred)
-                        single_loss = self.loss_function(y_pred, ft[:pt + 1].view(-1, 2))
-                        if batch_idx < len(flight_data) - 1 and pt % 50 == 0:
-                            single_loss.backward()
-                            self.optimizer.step()
-                        if batch_idx == len(flight_data) - 1:
-                            losses = torch.cat((losses, single_loss.view(-1)))
-                elif self.paradigm == 'Seq2Seq':
-                    self.optimizer.zero_grad()
-                    # iterate LSTM passes for batch size
-                    #TODO: NOT ITERATE
-                    for i in range(len(fp)):
-                        self.hidden_cell = (
-                            torch.repeat_interleave(fp[0, 0, 0], self.lstm_hidden).view(1, 1, self.lstm_hidden),
-                            torch.repeat_interleave(fp[0, 0, 1], self.lstm_hidden).view(1, 1, self.lstm_hidden))
-                        y_pred = self(wc.reshape((-1, 1, 20, 20)), fp[:])
-                        single_loss = self.loss_function(y_pred, ft[:].view(-1, 2))
-                        losses[batch_idx] = single_loss.view(-1)
-                        single_loss.backward()
-                        self.optimizer.step()
-                if batch_idx == len(flight_data) - 1:
-                    epoch_losses[ep] = torch.mean(losses).view(-1)
-
-                if ep % 10 == 0:
-                    if self.device.__contains__('cuda'):
-                        losses = losses.cpu()
-                    plt.plot(losses.detach().numpy())
-                    plt.title('Training (Epoch {})'.format(ep + 1))
-                    plt.xlabel('Flight')
-                    plt.ylabel('Loss (MSE)')
-                    # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
-                    plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
-                    plt.close()
-
-        if self.device.__contains__('cuda'):
-            epoch_losses = epoch_losses.cpu()
-        plt.plot(epoch_losses.detach().numpy())
-        plt.title('Avg Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Avg Loss (MSE)')
-        plt.savefig('Initialized Plots/Model Eval.png',dpi=300)
 
     def evaluate(self, flight_data: torch.utils.data.DataLoader, flights_sampled: list):
 
@@ -180,7 +117,7 @@ class CONV_LSTM(nn.Module):
                 for pt in tqdm.trange(len(wc)):
                     test_dataset = [wc[i], fp[i], ft[i]]
                     self.optimizer.zero_grad()
-                    self.hidden_cell(torch.zeros(1, 1, self.lstm_hidden),
+                    self.hidden_cell = (torch.zeros(1, 1, self.lstm_hidden),
                                      torch.zeros(1, 1, self.lstm_hidden))
                     y_pred = self(wc[pt].reshape((1, 1, 20, 20)), fp[pt][1:])
                     single_loss = self.loss_function(y_pred, ft[i][1:].view(-1, 2)).long().detach().numpy()
@@ -225,16 +162,9 @@ class CONV_LSTM(nn.Module):
             plt.ylabel('Error (MSE)')
             plt.close()
 
-
-def load_model(model_path: str):
-    dicts = torch.load(model_path)
-    struct = dicts['struct_dict']
-    state_dict = dicts['state_dict']
-    mdl = CONV_LSTM(paradigm=struct['paradigm'],
-                    conv_input=struct['conv_input'], conv_hidden=struct['conv_hidden'],
-                    conv_output=struct['conv_output'],
-                    dense_hidden=struct['dense_hidden'], dense_output=struct['dense_output'],
-                    lstm_input=struct['lstm_input'], lstm_hidden=struct['lstm_hidden'],
-                    lstm_output=struct['lstm_output'], device=struct['device'])
-    mdl.load_state_dict(state_dict)
-    return (mdl)
+    def model_name(self, epochs: int = 500, batch_size: int = 1):
+        opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
+        model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function, epochs,
+                                                                                  batch_size, self.lstm_input,
+                                                                                  self.lstm_hidden, self.lstm_output)
+        return model_name
