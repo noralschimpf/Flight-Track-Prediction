@@ -7,7 +7,7 @@ import tqdm
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
 from custom_dataset import ToTensor
-from model import CONV_LSTM, CONV_GRU
+from libmodels import CONV_LSTM, CONV_GRU
 from torch.utils.data import DataLoader
 
 # TODO: BATCH FLIGHTS
@@ -34,7 +34,7 @@ def main():
     root_dir = 'data/'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 
-    '''
+
     # Uncomment block if generating valid file & split files
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
     total_flights = len(fps)
@@ -53,8 +53,8 @@ def main():
     df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
     df_trainfiles.to_csv('train_flight_samples.txt')
     df_testfiles.to_csv('test_flight_samples.txt')
-    '''
 
+    '''    
     # Uncomment block if validated & split files already exist
     df_trainfiles = pd.read_csv('train_flight_samples.txt')
     print('Loading Train Files')
@@ -62,7 +62,7 @@ def main():
     fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
     wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
     #TODO: eliminate train_flights    
-
+    '''
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
     train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=8, pin_memory=True,
