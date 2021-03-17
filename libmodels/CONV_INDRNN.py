@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import os
 
 # customized Convolution and LSTM model
-#TODO: Replace LSTM with IndRNN
 class CONV_INDRNN(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
                  dense_output=4, rnn_input=6, rnn_hidden=100, rnn_output=2,
@@ -37,7 +36,6 @@ class CONV_INDRNN(nn.Module):
 
         ################################################################
         # IndRNN model #TODO: Match layering technique to other models
-
         if self.device.__contains__('cuda'):
             indrnn_base = cuda_indrnn
         else:
@@ -117,8 +115,6 @@ class CONV_INDRNN(nn.Module):
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
                     'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained}, model_path)
 
-    #TODO: Generalize for all models
-    #TODO: epochs from self.epochs_trained
     def model_name(self, batch_size: int = 1):
         recurrence = str(type(self.rnns[0])).split('\'')[1].split('.')[-1]
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
