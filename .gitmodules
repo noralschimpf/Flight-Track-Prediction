@@ -1,0 +1,3 @@
+[submodule "libmodels/IndRNN_pytorch"]
+	path = libmodels/IndRNN_pytorch
+	url = https://github.com/Sunnydreamrain/IndRNN_pytorch
