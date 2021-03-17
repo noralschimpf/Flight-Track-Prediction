@@ -3,9 +3,7 @@ import torch
 import tqdm
 import os
 from libmodels import model
-from libmodels.CONV_LSTM import CONV_LSTM
-from libmodels.CONV_GRU import CONV_GRU
-from libmodels.CONV_INDRNN import CONV_INDRNN
+from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from custom_dataset import CustomDataset, ToTensor, pad_batch
 
 
@@ -65,22 +63,25 @@ def main():
 
                 mdls[i].optimizer.zero_grad()
                 #TODO： T/except block for hidden cells
-                if isinstance(mdls[i], CONV_LSTM):
+                if mdls[i].rnn_type == torch.nn.LSTM:
                     mdls[i].hidden_cell = (
-                        torch.repeat_interleave(fp[0, :, 0], mdls[i].lstm_hidden).view(-1, 1, mdls[i].lstm_hidden),
-                        torch.repeat_interleave(fp[0, :, 1], mdls[i].lstm_hidden).view(-1, 1, mdls[i].lstm_hidden))
-                elif isinstance(mdls[i], CONV_GRU):
+                        torch.repeat_interleave(fp[0, :, 0], mdls[i].rnn_hidden).view(-1, 1, mdls[i].rnn_hidden),
+                        torch.repeat_interleave(fp[0, :, 1], mdls[i].rnn_hidden).view(-1, 1, mdls[i].rnn_hidden))
+                elif mdls[i].rnn_type == torch.nn.GRU:
                     mdls[i].hidden_cell = torch.cat((
-                        torch.repeat_interleave(fp[0, :, 0], int(mdls[i].gru_hidden / 2)),
-                        torch.repeat_interleave(fp[0, :, 1], int(mdls[i].gru_hidden / 2))
-                    )).view(1, -1, int(mdls[i].gru_hidden))
-                elif isinstance(mdls[i], CONV_INDRNN):
+                        torch.repeat_interleave(fp[0, :, 0], int(mdls[i].rnn_hidden / 2)),
+                        torch.repeat_interleave(fp[0, :, 1], int(mdls[i].rnn_hidden / 2))
+                    )).view(1, -1, int(mdls[i].rnn_hidden))
+                elif mdls[i].rnn_type == indrnn:
+                    pass
+                    '''
+                    #TODO: UNECEASSARY???
                     for j in range(len(mdls[i].rnns)):
                         mdls[i].rnns[j].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
                             torch.repeat_interleave(fp[0, :, 0], int(mdls[i].rnn_input / 2)),
                             torch.repeat_interleave(fp[0, :, 1], int(mdls[i].rnn_input / 2))
                         )))
-
+                    '''
                 y_pred = mdls[i](wc, fp)
                 flight_losses[idx] = mdls[i].loss_function(y_pred, ft)
 
@@ -88,9 +89,9 @@ def main():
                     y_pred, fp, ft = y_pred.cpu(), fp.cpu(), ft.cpu()
                 y_pred, fp, ft = y_pred.detach().numpy(), fp.detach().numpy(), ft.detach().numpy()
 
-                df_flight = pd.DataFrame(data={'flight plan LAT': fp[0,:, 0], 'flight plan LON': fp[0,:, 1],
-                                               'prediction LAT': y_pred[0, :, 0], 'prediction LON': y_pred[0, :, 1],
-                                               'actual LAT': ft[0,:, 0], 'actual LON': ft[0,:, 1]})
+                df_flight = pd.DataFrame(data={'flight plan LAT': fp[:,0, 0], 'flight plan LON': fp[:,0, 1],
+                                               'prediction LAT': y_pred[:,0, 0], 'prediction LON': y_pred[:,0, 1],
+                                               'actual LAT': ft[:,0, 0], 'actual LON': ft[:,0, 1]})
                 df_flight.to_csv('Output/{}/eval {}'.format(mdlname, flight_data.get_flightname(idx)))
 
             if mdls[i].device.__contains__('cuda'):
