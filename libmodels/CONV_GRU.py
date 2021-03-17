@@ -7,7 +7,8 @@ import os
 
 class CONV_GRU(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
-                 dense_output=4, gru_input=6, gru_hidden=100, gru_output=2):
+                 dense_output=4, gru_input=6, gru_hidden=100, gru_output=2,
+                 optim: torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         # conv and gru input and output parameters can be customized
         super().__init__()
         # convolution layer for weather feature extraction prior to the GRU
@@ -34,17 +35,20 @@ class CONV_GRU(nn.Module):
         ################################################################
         # GRU model
         # concatenate flight trajectory input with weather features
-        self.gru = nn.GRU(self.gru_input, self.gru_hidden, batch_first=True)
+        self.gru = nn.GRU(self.gru_input, self.gru_hidden)
         self.linear = nn.Linear(self.gru_hidden, self.gru_output)
 
-        # hidden cell dims: [batch_size][num_layers*num_directions][hidden_size]
+        # hidden cell dims: (num_layers*num_directions, batch_size, hidden_size)
         self.hidden_cell = torch.zeros(1, 1, self.gru_hidden)
 
         if self.device.__contains__('cuda'):
             self.cuda(self.device)
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
-        self.loss_function = nn.MSELoss()
+        if not issubclass(optim, torch.optim.Optimizer):
+            optim = type(optim)
+        self.optimizer = optim(self.parameters())
+        self.loss_function = loss
+        self.epochs_trained = eptrained
 
         self.struct_dict = {'class': str(self.__class__).split('\'')[1], 'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
@@ -52,7 +56,7 @@ class CONV_GRU(nn.Module):
                             'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
                             'gru_input': self.gru_input, 'gru_hidden': self.gru_hidden,
                             'gru_output': self.gru_output,
-                            'loss_fn': self.loss_function, 'optim': self.optimizer}
+                            'loss_fn': self.loss_function, 'optim': type(self.optimizer)}
 
     def forward(self, x_w, x_t):
         # convolution apply first
@@ -72,8 +76,8 @@ class CONV_GRU(nn.Module):
 
         #############################################################
         # input_seq = flight trajectory data + weather features
-        # shape: [batch_size, seq_len, features] - note: batch_first=True
-        gru_input_seq = torch.cat((x_fc_2.view(x_t.size(0), -1, 4), x_t), -1)
+        # shape: (seq_len, batch_size, features) - note: batch_first=False
+        gru_input_seq = torch.cat((x_fc_2.view(x_t.size(0), x_t.size(1), self.gru_input - 2), x_t), -1)
 
         # feed input_seq into LSTM model
         gru_out, self.hidden_cell = self.gru(gru_input_seq, self.hidden_cell)
@@ -82,9 +86,9 @@ class CONV_GRU(nn.Module):
         predictions = self.linear(gru_out)
         return predictions
 
-    def save_model(self, epochs, batch_size: str, model_name: str = None):
+    def save_model(self, batch_size: str, model_name: str = None):
         if model_name == None:
-            model_name = self.model_name(epochs=epochs, batch_size=batch_size)
+            model_name = self.model_name(batch_size=batch_size)
         model_path = 'Models/{}/{}'.format(model_name, model_name)
         while os.path.isfile(model_path):
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
@@ -95,11 +99,13 @@ class CONV_GRU(nn.Module):
                 model_path = 'Models/' + name
         if not os.path.isdir('Models/{}'.format(model_name)):
             os.mkdir('Models/{}'.format(model_name))
-        torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict()}, model_path)
+        torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
+                    'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained}, model_path)
 
-    def model_name(self, epochs: int = 500, batch_size: int = 1):
+    def model_name(self, batch_size: int = 1):
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
-        model_name = 'CONV-GRU-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-GRU{}_{}_{}'.format(opt, self.loss_function, epochs,
+        model_name = 'CONV-GRU-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-GRU{}_{}_{}'.format(opt, self.loss_function,
+                                                                                 self.epochs_trained,
                                                                                   batch_size, self.gru_input,
                                                                                   self.gru_hidden, self.gru_output)
         return model_name

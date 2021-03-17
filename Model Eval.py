@@ -2,7 +2,10 @@ import pandas as pd
 import torch
 import tqdm
 import os
-from libmodels import model, CONV_LSTM, CONV_GRU
+from libmodels import model
+from libmodels.CONV_LSTM import CONV_LSTM
+from libmodels.CONV_GRU import CONV_GRU
+from libmodels.CONV_INDRNN import CONV_INDRNN
 from custom_dataset import CustomDataset, ToTensor, pad_batch
 
 
@@ -37,20 +40,19 @@ def main():
 
     flight_data = CustomDataset(root_dir=root, abspath_fp=fp_test, abspath_ft=ft_test, abspath_wc=wc_test,
                                 transform=ToTensor(), device='cpu')
-    test_flights = torch.utils.data.DataLoader(flight_data, collate_fn=pad_batch, batch_size=1, num_workers=8,
+    test_flights = torch.utils.data.DataLoader(flight_data, collate_fn=pad_batch, batch_size=1, num_workers=0,
                                                pin_memory=True, shuffle=False, drop_last=True)
 
     # Generate MinMaxScalers
 
     # begin validation
     for i in range(len(mdls)):
-        mdlname = mdls[i].model_name(epochs=500, batch_size=1)
+        mdlname = mdls[i].model_name(batch_size=1)
         if not os.path.isdir('Output/{}'.format(mdlname)):
             os.mkdir('Output/{}'.format(mdlname))
 
         print(mdls[i])
 
-        mdls[i].eval()
         with torch.no_grad():
             flight_losses = torch.zeros(len(test_flights))
             for idx, (fp, ft, wc) in enumerate(tqdm.tqdm(test_flights, desc='eval flights', leave=False, position=0)):
@@ -65,15 +67,22 @@ def main():
                 #TODO： T/except block for hidden cells
                 if isinstance(mdls[i], CONV_LSTM):
                     mdls[i].hidden_cell = (
-                        torch.repeat_interleave(fp[0,0,0], mdls[i].lstm_hidden).view(1, 1, mdls[i].lstm_hidden),
-                        torch.repeat_interleave(fp[0,0,1], mdls[i].lstm_hidden).view(1, 1, mdls[i].lstm_hidden))
+                        torch.repeat_interleave(fp[0, :, 0], mdls[i].lstm_hidden).view(-1, 1, mdls[i].lstm_hidden),
+                        torch.repeat_interleave(fp[0, :, 1], mdls[i].lstm_hidden).view(-1, 1, mdls[i].lstm_hidden))
                 elif isinstance(mdls[i], CONV_GRU):
-                    mdls[i].hidden_cell = torch.hstack((
-                        torch.repeat_interleave(fp[:, 0, 0], int(mdls[i].gru_hidden / 2)),
-                        torch.repeat_interleave(fp[:, 0, 1], int(mdls[i].gru_hidden / 2))
-                        )).view(1, -1, int(mdls[i].gru_hidden))
+                    mdls[i].hidden_cell = torch.cat((
+                        torch.repeat_interleave(fp[0, :, 0], int(mdls[i].gru_hidden / 2)),
+                        torch.repeat_interleave(fp[0, :, 1], int(mdls[i].gru_hidden / 2))
+                    )).view(1, -1, int(mdls[i].gru_hidden))
+                elif isinstance(mdls[i], CONV_INDRNN):
+                    for j in range(len(mdls[i].rnns)):
+                        mdls[i].rnns[j].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
+                            torch.repeat_interleave(fp[0, :, 0], int(mdls[i].rnn_input / 2)),
+                            torch.repeat_interleave(fp[0, :, 1], int(mdls[i].rnn_input / 2))
+                        )))
 
                 y_pred = mdls[i](wc, fp)
+                #TODO: Disable batch_first for lstm/gru models
                 flight_losses[idx] = mdls[i].loss_function(y_pred, ft)
 
                 if mdls[i].device.__contains__('cuda'):
