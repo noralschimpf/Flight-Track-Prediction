@@ -8,7 +8,6 @@ def load_model(model_path: str):
     struct = dicts['struct_dict']
     state_dict = dicts['state_dict']
     opt_dict = dicts['opt_dict']
-    #TODO: Add loss/opt selection in constructor and model load
     if 'CONV_LSTM' in struct['class']:
         mdl = CONV_LSTM(paradigm=struct['paradigm'],
                         conv_input=struct['conv_input'], conv_hidden=struct['conv_hidden'],
