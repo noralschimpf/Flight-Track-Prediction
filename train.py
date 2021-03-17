@@ -7,10 +7,12 @@ import tqdm
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
 from custom_dataset import ToTensor
-from libmodels import CONV_LSTM, CONV_GRU
+from libmodels.CONV_LSTM import CONV_LSTM
+from libmodels.CONV_GRU import CONV_GRU
+from libmodels.CONV_INDRNN import CONV_INDRNN
 from torch.utils.data import DataLoader
 
-# TODO: BATCH FLIGHTS
+
 '''TRAINING CONFIGS
 3D EXPECTED: 1000 Epochs, Batch Size 64 -> MSE .001 Train/Test 90/10
 3D EXPECTED: 500 Epochs -> MSE .001 (no batching)   Train/Test 75/25
@@ -24,12 +26,12 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 500
+    epochs = 1
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
 
-    dev = 'cuda:1'
-    # dev = 'cpu'
+    # dev = 'cuda:1'
+    dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
@@ -65,20 +67,22 @@ def main():
     '''
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
-    train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=8, pin_memory=True,
+    train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=0, pin_memory=True,
                           shuffle=False, drop_last=True)
 
     # train_model
     model_lstm = CONV_LSTM(paradigm=paradigms[1], device=dev)
     model_gru = CONV_GRU(paradigm=paradigms[1], device=dev)
-    mdl_recurrence = ['lstm', 'gru']
-    mdls = [model_lstm, model_gru]
+    model_indrnn = CONV_INDRNN(paradigm=paradigms[1], device=dev)
+
+    mdls = [model_indrnn, model_lstm, model_gru]
 
     for i in range(len(mdls)):
         sttime = datetime.now()
         print('START FIT: {}'.format(sttime))
         fit(mdls[i], train_dl, epochs, train_flights, recurrence=mdl_recurrence[i])
-        mdls[i].save_model(epochs=epochs, batch_size=bs)
+        mdls[i].epochs_trained = epochs
+        mdls[i].save_model(batch_size=bs)
         edtime = datetime.now()
         print('DONE: {}'.format(edtime - sttime))
 
@@ -131,18 +135,25 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
             elif mdl.paradigm == 'Seq2Seq':
                 mdl.optimizer.zero_grad()
 
+                # TODO: Abstraction (Unify recurrences within one class)
                 # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
-                if recurrence == 'lstm':
+                if isinstance(mdl, CONV_LSTM):
                     mdl.hidden_cell = (
-                        torch.repeat_interleave(fp[:, 0, 0], mdl.lstm_hidden).view(1, -1, mdl.lstm_hidden),
-                        torch.repeat_interleave(fp[:, 0, 1], mdl.lstm_hidden).view(1, -1, mdl.lstm_hidden))
-                elif recurrence == 'gru':
-                    mdl.hidden_cell = torch.hstack((
-                        torch.repeat_interleave(fp[:, 0, 0], int(mdl.gru_hidden / 2)),
-                        torch.repeat_interleave(fp[:, 0, 1], int(mdl.gru_hidden / 2))
+                        torch.repeat_interleave(fp[0, :, 0], mdl.lstm_hidden).view(-1, 1, mdl.lstm_hidden),
+                        torch.repeat_interleave(fp[0, :, 1], mdl.lstm_hidden).view(-1, 1, mdl.lstm_hidden))
+                elif isinstance(mdl, CONV_GRU):
+                    mdl.hidden_cell = torch.cat((
+                        torch.repeat_interleave(fp[0, :, 0], int(mdl.gru_hidden / 2)),
+                        torch.repeat_interleave(fp[0, :, 1], int(mdl.gru_hidden / 2))
                     )).view(1, -1, int(mdl.gru_hidden))
+                elif isinstance(mdl, CONV_INDRNN):
+                    for i in range(len(mdl.rnns)):
+                        mdl.rnns[i].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
+                            torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_input / 2)),
+                            torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_input / 2))
+                        )))
                 y_pred = mdl(wc, fp[:])
-                single_loss = mdl.loss_function(y_pred, ft[:])
+                single_loss = mdl.loss_function(y_pred, ft)
                 losses[batch_idx] = single_loss.view(-1)
                 single_loss.backward()
                 mdl.optimizer.step()
