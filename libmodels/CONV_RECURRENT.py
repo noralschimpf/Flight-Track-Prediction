@@ -1,18 +1,19 @@
 import torch
 import tqdm
+# from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import os
 
 # customized Convolution and LSTM model
-class CONV_LSTM(nn.Module):
+class CONV_RECURRENT(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
-                 dense_output=4, lstm_input=6, lstm_hidden=100, lstm_output=2,
-                 optim: torch.optim = torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained = 0):
-        # conv and lstm input and output parameters can be customized
+                 dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=2,
+                 optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
-        # convolution layer for weather feature extraction prior to the LSTM
+        # convolution layer for weather feature extraction prior to the RNN
         self.device = device
         self.paradigm = paradigm
 
@@ -22,25 +23,50 @@ class CONV_LSTM(nn.Module):
         self.dense_hidden = dense_hidden
         self.dense_output = dense_output
 
-        self.lstm_input = lstm_input
-        self.lstm_hidden = lstm_hidden
-        self.lstm_output = lstm_output
+        self.rnn_type = rnn
+        self.rnn_layers = rnn_layers
+        self.rnn_input = rnn_input
+        self.rnn_hidden = rnn_hidden
+        self.rnn_output = rnn_output
+        self.hidden_cell = None
+
 
         self.conv_1 = torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2)
         self.conv_2 = torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2)
-        # self.pool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         # 64 input features, 16 output features (see sizing flow below)
         self.fc1 = torch.nn.Linear(self.conv_output * 9, self.dense_hidden)
         # 16 input features, 4 output features (see sizing flow below)
         self.fc2 = torch.nn.Linear(self.dense_hidden, self.dense_output)
 
         ################################################################
-        # LSTM model
-        # concatenate flight trajectory input with weather features
-        self.lstm = nn.LSTM(self.lstm_input, self.lstm_hidden)
-        self.linear = nn.Linear(self.lstm_hidden, self.lstm_output)
-        # h_0, c_0 sizes (num_layers*num_directions, batch, hidden_size)
-        self.hidden_cell = (torch.zeros(1, 1, self.lstm_hidden), torch.zeros(1, 1, self.lstm_hidden))
+        # IndRNN model
+        self.rnns = nn.ModuleList()
+
+        for i in range(self.rnn_layers):
+            if self.rnn_type == indrnn:
+                self.rnns.append(self.rnn_type(hidden_size=self.rnn_input))
+            elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
+                self.rnns.append(self.rnn_type(input_size=self.rnn_input, hidden_size=self.rnn_hidden))
+            # gru/lstm(input_size, hidden_size, num_layers)
+            # indrnn(hidden_size)
+            # indrnns[i].indrnn_cell initialized on uniform distr. Set to coordinates in training
+
+        if self.rnn_type == torch.nn.LSTM:
+            # h_,c_ each of size (num_layers*num_directions, batch_size, hidden_size)
+            self.hidden_cell = (torch.zeros((self.rnn_layers * 1, 1, self.rnn_hidden)),
+                                torch.zeros((self.rnn_layers * 1, 1, self.rnn_hidden)))
+        elif self.rnn_type == torch.nn.GRU:
+            # h_ of size (num_layers*num_directions, batch_size, hidden_size)
+            self.hidden_cell = torch.zeros((self.rnn_layers * 1, 1, self.rnn_hidden))
+        elif self.rnn_type == indrnn:
+            # indrnn does not use an external cell state
+            pass
+
+        tmp = self.rnn_hidden
+        if self.rnn_type == indrnn:
+            tmp = self.rnn_input
+
+        self.linear = nn.Linear(tmp, self.rnn_output)
 
         if self.device.__contains__('cuda'):
             self.cuda(self.device)
@@ -50,13 +76,15 @@ class CONV_LSTM(nn.Module):
         self.optimizer = optim(self.parameters())
         self.loss_function = loss
         self.epochs_trained = eptrained
-        self.struct_dict = {'class': str(self.__class__).split('\'')[1],
+
+        self.struct_dict = {'class': str(type(self)).split('\'')[1],
                             'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
                             'conv_output': self.conv_output,
                             'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
-                            'lstm_input': self.lstm_input, 'lstm_hidden': self.lstm_hidden,
-                            'lstm_output': self.lstm_output,
+                            'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
+                            'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
+                            'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell,
                             'loss_fn': self.loss_function, 'optim': type(self.optimizer)}
 
     def forward(self, x_w, x_t):
@@ -76,14 +104,21 @@ class CONV_LSTM(nn.Module):
 
         #############################################################
         # input_seq = flight trajectory data + weather features
-        # shape: [seq_len, batch_size, features] - note: batch_first=False
-        lstm_input_seq = torch.cat((x_fc_2.view(x_t.size(0), x_t.size(1), self.lstm_input - 2), x_t), -1)
+        # shape: [seq_len, batch_size, input_features]
+        rnn_input_seq = torch.cat((x_fc_2.view(x_t.size(0), x_t.size(1), self.rnn_input - 2), x_t), -1)
+        rnnouts = {}
+        rnnouts['rnn-out-1'] = rnn_input_seq
+        for i in range(len(self.rnns)):
+            if self.rnn_type == indrnn:
+                rnnouts['rnn-out{}'.format(i)] = self.rnns[i](rnnouts['rnn-out{}'.format(i - 1)])
+            elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
+                rnnouts['rnn-out{}'.format(i)], self.hidden_cell = self.rnns[i](rnnouts['rnn-out{}'.format(i - 1)])
 
         # feed input_seq into LSTM model
-        lstm_out, self.hidden_cell = self.lstm(lstm_input_seq, self.hidden_cell)
+        #lstm_out, self.hidden_cell = self.lstm(lstm_input_seq, self.hidden_cell)
 
         # TODO: Dimension expansion (eq. 2l in Pang, Xu, Liu)
-        predictions = self.linear(lstm_out)
+        predictions = self.linear(rnnouts['rnn-out{}'.format(len(self.rnns) - 1)])
         return predictions
 
     def save_model(self, batch_size: str, model_name: str = None):
@@ -103,9 +138,10 @@ class CONV_LSTM(nn.Module):
                     'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained}, model_path)
 
     def model_name(self, batch_size: int = 1):
+        recurrence = str(type(self.rnns[0])).split('\'')[1].split('.')[-1]
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
-        model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function,
+        model_name = 'CONV-{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(recurrence, opt, self.loss_function,
                                                                                 self.epochs_trained,
-                                                                                batch_size, self.lstm_input,
-                                                                                self.lstm_hidden, self.lstm_output)
+                                                                                batch_size, self.rnn_input,
+                                                                                self.rnn_hidden, self.rnn_output)
         return model_name
