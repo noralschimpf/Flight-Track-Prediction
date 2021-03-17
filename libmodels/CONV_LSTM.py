@@ -102,67 +102,6 @@ class CONV_LSTM(nn.Module):
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
                     'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained}, model_path)
 
-
-    def evaluate(self, flight_data: torch.utils.data.DataLoader, flights_sampled: list):
-
-        if self.paradigm == 'Regression':
-            for i in range(len(flights_sampled)):
-                fp, ft, wc = flight_data[flights_sampled[i]]
-                wc = wc[:len(fp)]
-                print("\nFlight {}/{}: ".format(i + 1, len(flights_sampled)) + str(len(fp)) + " points")
-
-                losses = torch.zeros(len(wc), requires_grad=False, device=self.device)
-                preds = torch.zeros(len(wc), requires_grad=False, device=self.device)
-                lbls = torch.zeros(len(wc), requires_grad=False, device=self.device)
-
-                for pt in tqdm.trange(len(wc)):
-                    test_dataset = [wc[i], fp[i], ft[i]]
-                    self.optimizer.zero_grad()
-                    self.hidden_cell = (torch.zeros(1, 1, self.lstm_hidden),
-                                     torch.zeros(1, 1, self.lstm_hidden))
-                    y_pred = self(wc[pt].reshape((1, 1, 20, 20)), fp[pt][1:])
-                    single_loss = self.loss_function(y_pred, ft[i][1:].view(-1, 2)).long().detach().numpy()
-        elif self.paradigm == 'Seq2Seq':
-            flight_losses = torch.zeros(len(flights_sampled))
-            for i in tqdm.trange(len(flights_sampled)):
-
-                fp, ft, wc = flight_data[flights_sampled[i]]
-                maxlen = min(len(fp), len(ft), len(wc))
-                fp, ft, wc = fp[:, 1:], ft[:, 1:], wc[:]
-
-                self.optimizer.zero_grad()
-                self.hidden_cell = (
-                    torch.repeat_interleave(fp[0][0], self.lstm_hidden).view(1, 1, self.lstm_hidden),
-                    torch.repeat_interleave(fp[0][1], self.lstm_hidden).view(1, 1, self.lstm_hidden))
-                y_pred = self(wc.reshape((-1, 1, 20, 20)), fp[:])
-                flight_losses[i] = self.loss_function(y_pred, ft[:].view(-1, 2))
-
-                # TODO: Actually plot results to Basemap, or store in KML
-                if i == 4:
-                    fig, ax = plt.subplots()
-                    yp_copy, ft_copy = None, None
-                    if self.device.__contains__('cuda'):
-                        yp_copy = y_pred.cpu().detach().numpy()
-                        ft_copy = ft.cpu().detach().numpy()
-                    else:
-                        yp_copy = y_pred.detach().numpy()
-                        ft_copy = y_pred.detach().numpy()
-
-                    ax.scatter(yp_copy[:, 0], yp_copy[:, 1])
-                    ax.scatter(ft_copy[:, 0], ft_copy[:, 1])
-                    ax.legend(['prediction', 'actual'])
-                    plt.savefig('Initialized Plots/Sample Flight Eval.png', dpi=400)
-                    plt.title('Plot of Sample Flight Predictions')
-                    plt.close()
-            if self.device.__contains__('cuda'):
-                flight_losses = flight_losses.cpu()
-            plt.plot(flight_losses.detach().numpy())
-            plt.savefig('Initialized Plots/Model Eval.png', dpi=400)
-            plt.title('Evaluation of Test Flights')
-            plt.xlabel('flights')
-            plt.ylabel('Error (MSE)')
-            plt.close()
-
     def model_name(self, batch_size: int = 1):
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
         model_name = 'CONV-LSTM-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-LSTM{}_{}_{}'.format(opt, self.loss_function,
