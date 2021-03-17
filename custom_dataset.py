@@ -119,5 +119,5 @@ def pad_batch(batch):
     fp = [item[0] for item in batch]
     ft = [item[1] for item in batch]
     wc = [item[2] for item in batch]
-    fp, ft, wc = pad_sequence(fp, batch_first=True), pad_sequence(ft, batch_first=True), pad_sequence(wc, batch_first=True)
+    fp, ft, wc = pad_sequence(fp), pad_sequence(ft), pad_sequence(wc)
     return [fp, ft, wc]
