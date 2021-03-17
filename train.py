@@ -7,9 +7,8 @@ import tqdm
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
 from custom_dataset import ToTensor
-from libmodels.CONV_LSTM import CONV_LSTM
-from libmodels.CONV_GRU import CONV_GRU
-from libmodels.CONV_INDRNN import CONV_INDRNN
+from libmodels.CONV_RECURRENT import CONV_RECURRENT
+from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent
 from torch.utils.data import DataLoader
 
 
@@ -71,16 +70,21 @@ def main():
                           shuffle=False, drop_last=True)
 
     # train_model
+    '''
     model_lstm = CONV_LSTM(paradigm=paradigms[1], device=dev)
     model_gru = CONV_GRU(paradigm=paradigms[1], device=dev)
     model_indrnn = CONV_INDRNN(paradigm=paradigms[1], device=dev)
-
-    mdls = [model_indrnn, model_lstm, model_gru]
+    '''
+    model_lstm = CONV_RECURRENT(paradigm = paradigms[1], device=dev, rnn=torch.nn.LSTM)
+    model_gru = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.GRU)
+    model_indrnn = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2)
+    mdls = [model_lstm, model_gru, model_indrnn]
 
     for i in range(len(mdls)):
+        print(mdls[i])
         sttime = datetime.now()
         print('START FIT: {}'.format(sttime))
-        fit(mdls[i], train_dl, epochs, train_flights, recurrence=mdl_recurrence[i])
+        fit(mdls[i], train_dl, epochs, train_flights)
         mdls[i].epochs_trained = epochs
         mdls[i].save_model(batch_size=bs)
         edtime = datetime.now()
@@ -97,8 +101,7 @@ def main():
         shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdls[i].model_name(epochs)))
 
 
-def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',
-        recurrence: str = 'lstm'):
+def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',):
     epoch_losses = torch.zeros(epochs, device=mdl.device)
     for ep in tqdm.trange(epochs, desc='epoch', position=0, leave=False):
         losses = torch.zeros(len(flight_data), device=mdl.device)
@@ -117,11 +120,11 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
                 for pt in tqdm.trange(len(wc)):
                     mdl.optimizer.zero_grad()
                     lat, lon = fp[0][0].clone().detach(), fp[0][1].clone().detach()
-                    if recurrence == 'lstm':
+                    if mdl.rnn_type == torch.nn.LSTM:
                         mdl.hidden_cell = (
                             lat.repeat(1, 1, mdl.lstm_hidden),
                             lon.repeat(1, 1, mdl.lstm_hidden))
-                    elif recurrence == 'gru':
+                    elif mdl.rnn_type == torch.nn.GRU:
                         mdl.hidden_cell = torch.cat(lat.repeat(1, 1, mdl.gru_hidden / 2),
                                                     lon.repeat(1, 1, mdl.gru_hidden / 2))
                     y_pred = mdl(wc[:pt + 1], fp[:pt + 1])
@@ -137,21 +140,24 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
 
                 # TODO: Abstraction (Unify recurrences within one class)
                 # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
-                if isinstance(mdl, CONV_LSTM):
+                if mdl.rnn_type == torch.nn.LSTM:
                     mdl.hidden_cell = (
-                        torch.repeat_interleave(fp[0, :, 0], mdl.lstm_hidden).view(-1, 1, mdl.lstm_hidden),
-                        torch.repeat_interleave(fp[0, :, 1], mdl.lstm_hidden).view(-1, 1, mdl.lstm_hidden))
-                elif isinstance(mdl, CONV_GRU):
+                        torch.repeat_interleave(fp[0, :, 0], mdl.rnn_hidden).view(-1, 1, mdl.rnn_hidden),
+                        torch.repeat_interleave(fp[0, :, 1], mdl.rnn_hidden).view(-1, 1, mdl.rnn_hidden))
+                elif mdl.rnn_type == torch.nn.GRU:
                     mdl.hidden_cell = torch.cat((
-                        torch.repeat_interleave(fp[0, :, 0], int(mdl.gru_hidden / 2)),
-                        torch.repeat_interleave(fp[0, :, 1], int(mdl.gru_hidden / 2))
-                    )).view(1, -1, int(mdl.gru_hidden))
-                elif isinstance(mdl, CONV_INDRNN):
+                        torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_hidden / 2)),
+                        torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_hidden / 2))
+                    )).view(1, -1, int(mdl.rnn_hidden))
+                elif mdl.rnn_type == IndRNN_onlyrecurrent:
+                    '''
+                    #TODO: is initialization necessary for indrnn?
                     for i in range(len(mdl.rnns)):
                         mdl.rnns[i].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
                             torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_input / 2)),
                             torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_input / 2))
                         )))
+                    '''
                 y_pred = mdl(wc, fp[:])
                 single_loss = mdl.loss_function(y_pred, ft)
                 losses[batch_idx] = single_loss.view(-1)
