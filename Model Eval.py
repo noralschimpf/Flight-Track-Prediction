@@ -82,7 +82,6 @@ def main():
                         )))
 
                 y_pred = mdls[i](wc, fp)
-                #TODO: Disable batch_first for lstm/gru models
                 flight_losses[idx] = mdls[i].loss_function(y_pred, ft)
 
                 if mdls[i].device.__contains__('cuda'):
