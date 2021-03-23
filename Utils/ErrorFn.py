@@ -12,10 +12,24 @@ def L2Norm(true: np.array, test: np.array):
         raise ValueError('True and Test array shapes must match dimenions')
     norm = 0
     for i in range(true.shape[0]):
+        dist  = 0
         for j in range(true.shape[1]):
-            norm += (true[i,j] - test[i,j])**2
+            dist += abs((true[i,j] - test[i,j]))**2
+        norm += np.sqrt(dist)
     return np.sqrt(norm)
 
+def MSE(act: np.array, test:np.array):
+    if act.shape != test.shape:
+        raise ValueError('True and Test array shapes must match dimenions')
+    mse = 0
+    # for each point
+    for i in range(act.shape[0]):
+        # for each dimension
+        dist = 0
+        for j in range(act.shape[1]):
+            dist += abs((act[i,j] - test[i,j]))**2
+        mse += np.sqrt(dist)
+    return mse/act.shape[0]
 
 def reduction(l2_orig, l2_new):
     if isinstance(l2_orig, np.ndarray) or isinstance(l2_orig, list):

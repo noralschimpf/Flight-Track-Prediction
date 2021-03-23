@@ -27,20 +27,26 @@ for mdl in mdls:
         if len(mse_loss) > 0:
             # calculated L2norm and % improvement for denormed flight
             df_flight = pd.read_csv('Output/{}/Denormed/{}'.format(mdl,evals[e]))
-            nda_fp = df_flight[['flight plan LAT', 'flight plan LON']].values.T
-            nda_pred = df_flight[['predicted LAT', 'predicted LON']].values.T
-            nda_act =  df_flight[['actual LAT', 'actual LON']].values.T
+            nda_fp = df_flight[['flight plan LAT', 'flight plan LON']].values
+            nda_pred = df_flight[['predicted LAT', 'predicted LON']].values
+            nda_act =  df_flight[['actual LAT', 'actual LON']].values
+            '''
+            a = torch.tensor(nda_fp).view(-1,2)
+            b = torch.tensor(nda_act).view(-1,2)
+            loss = torch.nn.MSELoss()
+            print('\nnn.MSE:{:.3f}\nL2:{:.3f}\nMSE:{:.3f}'.format(loss(a,b),fn.L2Norm(b,a),fn.MSE(b,a)))
+            '''
             l2_fps[e] = fn.L2Norm(nda_act, nda_fp)
             l2_preds[e] = fn.L2Norm(nda_act, nda_pred)
             reduction = fn.reduction(l2_fps[e], l2_preds[e])
 
             # plot trajectory v flight plan v actual, include mse, reduction in title and norms in legend
 
-            '''m = Basemap(width=12000000, height=9000000,
+            m = Basemap(width=6000000, height=4000000,
                         area_thresh=10000, projection='lcc',
-                        lat_0=38., lon_0=-98., lat_1=25.)'''
-            m = Basemap(area_thresh=1000, projection='merc',
-                        llcrnrlon=-130, urcrnrlon=-60, llcrnrlat=20, urcrnrlat=45)
+                        lat_0=38., lon_0=-98., lat_1=25.)
+            '''m = Basemap(area_thresh=1000, projection='merc',
+                        llcrnrlon=-130, urcrnrlon=-60, llcrnrlat=20, urcrnrlat=45)'''
             parallels = np.arange(0.,80.,10.)
             meridians = np.arange(10.,351.,20.)
             m.drawcoastlines()
@@ -48,9 +54,9 @@ for mdl in mdls:
             m.drawmeridians(meridians, labels=[True, False, False, True])
             fig2 = plt.gca()
 
-            m.plot(nda_fp[1,:], nda_fp[0,:], latlon=True, color='blue',label='flight plan  L2-Norm:{:.3f}'.format(l2_fps[e]))
-            m.plot(nda_pred[1,:], nda_pred[0,:], latlon=True, color='yellow', label='prediction  L2-Norm:{:.3f}'.format(l2_preds[e]))
-            m.plot(nda_act[1,:], nda_act[0,:], latlon=True, color='red', label='actual')
+            a = m.plot(nda_fp[:,1], nda_fp[:,0], latlon=True, color='blue', alpha=.5, label='flight plan L2-Norm: {:.3f}'.format(l2_fps[e]))
+            b = m.plot(nda_pred[:,1], nda_pred[:,0], latlon=True, color='green', alpha=.5, label='prediction L2-Norm: {:.3f}'.format(l2_preds[e]))
+            c = m.plot(nda_act[:,1], nda_act[:,0], latlon=True, color='red', alpha=.5, label='actual')
             plt.legend()
             plt.title("{}\nMSE: {:.4f}   Reduction: {:.3f}".format(evals[e][5:-4], mse_loss[0], reduction * 100))
             if not os.path.isdir('Output/{}/Figs'.format(mdl)):
