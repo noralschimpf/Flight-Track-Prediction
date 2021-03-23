@@ -2,6 +2,7 @@ import torch
 import tqdm
 # from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
+from libmodels.Standalone_Self_Attention.attention import AttentionConv
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -11,11 +12,13 @@ import os
 class CONV_RECURRENT(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
                  dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=2,
+                 attn='None',
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
         # convolution layer for weather feature extraction prior to the RNN
         self.device = device
         self.paradigm = paradigm
+        self.attntype = attn
 
         self.conv_input = conv_input
         self.conv_hidden = conv_hidden
@@ -30,13 +33,21 @@ class CONV_RECURRENT(nn.Module):
         self.rnn_output = rnn_output
         self.hidden_cell = None
 
+        self.convs = nn.ModuleList()
+        self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
+        self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
+        if self.attntype == 'after':
+            self.convs.append(AttentionConv(in_channels=4,out_channels=4,kernel_size=3,stride=1,padding=0,groups=1,bias=False))
 
-        self.conv_1 = torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2)
-        self.conv_2 = torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2)
-        # 64 input features, 16 output features (see sizing flow below)
-        self.fc1 = torch.nn.Linear(self.conv_output * 9, self.dense_hidden)
-        # 16 input features, 4 output features (see sizing flow below)
-        self.fc2 = torch.nn.Linear(self.dense_hidden, self.dense_output)
+
+        if self.rnn_type == indrnn:
+            self.fc1 = torch.nn.Linear(self.conv_output*9, self.rnn_hidden)
+            self.fc2 = torch.nn.Linear(self.rnn_hidden, self.rnn_hidden-2)
+        elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
+            # 64 input features, 16 output features (see sizing flow below)
+            self.fc1 = torch.nn.Linear(self.conv_output * 9, self.dense_hidden)
+            # 16 input features, 4 output features (see sizing flow below)
+            self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_input-2)
 
         ################################################################
         # IndRNN model
@@ -44,7 +55,7 @@ class CONV_RECURRENT(nn.Module):
 
         for i in range(self.rnn_layers):
             if self.rnn_type == indrnn:
-                self.rnns.append(self.rnn_type(hidden_size=self.rnn_input))
+                self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
             elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
                 self.rnns.append(self.rnn_type(input_size=self.rnn_input, hidden_size=self.rnn_hidden))
             # gru/lstm(input_size, hidden_size, num_layers)
@@ -62,17 +73,14 @@ class CONV_RECURRENT(nn.Module):
             # indrnn does not use an external cell state
             pass
 
-        tmp = self.rnn_hidden
-        if self.rnn_type == indrnn:
-            tmp = self.rnn_input
-
-        self.linear = nn.Linear(tmp, self.rnn_output)
+        self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
 
         if self.device.__contains__('cuda'):
             self.cuda(self.device)
 
         if not issubclass(optim, torch.optim.Optimizer):
             optim = type(optim)
+
         self.optimizer = optim(self.parameters())
         self.loss_function = loss
         self.epochs_trained = eptrained
@@ -80,7 +88,7 @@ class CONV_RECURRENT(nn.Module):
         self.struct_dict = {'class': str(type(self)).split('\'')[1],
                             'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
-                            'conv_output': self.conv_output,
+                            'conv_output': self.conv_output, 'attntype': self.attntype,
                             'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
                             'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
                             'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
@@ -92,11 +100,16 @@ class CONV_RECURRENT(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
+        tmp = x_w.view(-1,1,20,20)
+        for i in range(len(self.convs)):
+            tmp = F.relu(self.convs[i](tmp))
+        '''
         x_conv_1 = F.relu(self.conv_1(x_w.view(-1,1,20,20)))
         x_conv_2 = F.relu(self.conv_2(x_conv_1))
+        '''
 
         # Flatten the convolution layer output
-        x_conv_output = x_conv_2.view(-1, self.conv_output * 9)
+        x_conv_output = tmp.view(-1, self.conv_output * 9)
         x_fc_1 = F.relu(self.fc1(x_conv_output))
         # Computes the second fully connected layer (activation applied later)
         # Size changes from (1, 256) to (1, 64)
@@ -105,7 +118,7 @@ class CONV_RECURRENT(nn.Module):
         #############################################################
         # input_seq = flight trajectory data + weather features
         # shape: [seq_len, batch_size, input_features]
-        rnn_input_seq = torch.cat((x_fc_2.view(x_t.size(0), x_t.size(1), self.rnn_input - 2), x_t), -1)
+        rnn_input_seq = torch.cat((x_fc_2.view(x_t.size(0),x_t.size(1),-1), x_t,), -1)
         rnnouts = {}
         rnnouts['rnn-out-1'] = rnn_input_seq
         for i in range(len(self.rnns)):
@@ -140,7 +153,10 @@ class CONV_RECURRENT(nn.Module):
     def model_name(self, batch_size: int = 1):
         recurrence = str(type(self.rnns[0])).split('\'')[1].split('.')[-1]
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
-        model_name = 'CONV-{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(recurrence, opt, self.loss_function,
+        convs = 'CONV-'
+        if self.attntype == 'after':
+            convs = convs + 'SA-'
+        model_name = '{}{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(convs, recurrence, opt, self.loss_function,
                                                                                 self.epochs_trained,
                                                                                 batch_size, self.rnn_input,
                                                                                 self.rnn_hidden, self.rnn_output)
