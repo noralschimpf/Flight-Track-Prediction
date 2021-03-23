@@ -54,8 +54,8 @@ def main():
     df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
     df_trainfiles.to_csv('train_flight_samples.txt')
     df_testfiles.to_csv('test_flight_samples.txt')
+    '''
 
-    '''    
     # Uncomment block if validated & split files already exist
     df_trainfiles = pd.read_csv('train_flight_samples.txt')
     print('Loading Train Files')
@@ -78,7 +78,12 @@ def main():
     model_lstm = CONV_RECURRENT(paradigm = paradigms[1], device=dev, rnn=torch.nn.LSTM)
     model_gru = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.GRU)
     model_indrnn = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2)
-    mdls = [model_lstm, model_gru, model_indrnn]
+    model_lstm_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.LSTM, attn='after')
+    model_gru_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.GRU, attn='after')
+    model_indrnn_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2, attn='after')
+
+
+    mdls = [model_lstm, model_gru, model_indrnn, model_lstm_sa, model_gru_sa, model_indrnn_sa]
 
     for i in range(len(mdls)):
         print(mdls[i])
@@ -96,9 +101,9 @@ def main():
         for plot in plots_to_move:
             shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdls[i].model_name(epochs), plot))
 
-        shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdls[i].model_name(epochs)))
-        shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdls[i].model_name(epochs)))
-        shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdls[i].model_name(epochs)))
+        shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdls[i].model_name(bs)))
+        shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdls[i].model_name(bs)))
+        shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdls[i].model_name(bs)))
 
 
 def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',):
