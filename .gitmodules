@@ -1,3 +1,6 @@
 [submodule "libmodels/IndRNN_pytorch"]
 	path = libmodels/IndRNN_pytorch
 	url = https://github.com/Sunnydreamrain/IndRNN_pytorch
+[submodule "libmodels/Stand-Alone-Self-Attention"]
+	path = libmodels/Stand-Alone-Self-Attention
+	url = https://github.com/leaderj1001/Stand-Alone-Self-Attention.git

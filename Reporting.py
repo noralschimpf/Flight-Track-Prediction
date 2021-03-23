@@ -2,7 +2,8 @@ import os
 if os.name == 'posix':
     os.environ['PROJ_LIB'] = "/home/lab/anaconda3/pkgs/proj-7.2.0-he47e99f_1/share/proj/"
 elif os.name == 'nt':
-    os.environ['PROJ_LIB'] = 'C:\\Users\\User\\anaconda3\\pkgs\\proj4-5.2.0-ha925a31_1\\Library\\share'
+    # os.environ['PROJ_LIB'] = 'C:\\Users\\User\\anaconda3\\pkgs\\proj4-5.2.0-ha925a31_1\\Library\\share'
+    os.environ['PROJ_LIB'] = 'C:\\Users\\natha\\anaconda3\\pkgs\\proj4-5.2.0-ha925a31_1\\Library\\share'
 import tqdm
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ import Utils.ErrorFn as fn
 
 # Plots: Trajectories v. Known, MSE of each Flight in Test Data
 
-mdls = [x for x  in os.listdir('Models') if os.path.isdir('Models/{}'.format(x))]
+mdls = [x for x  in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCH' in x]
 for mdl in mdls:
     df_flight_losses = pd.read_csv('Models/{}/flight losses.txt'.format(mdl))
     evals = [x for x in os.listdir('Output/{}/Denormed'.format(mdl))
