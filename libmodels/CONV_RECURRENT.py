@@ -2,6 +2,7 @@ import torch
 import tqdm
 # from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
+from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.Standalone_Self_Attention.attention import AttentionConv
 import torch.nn as nn
 import torch.nn.functional as F
@@ -34,8 +35,15 @@ class CONV_RECURRENT(nn.Module):
         self.hidden_cell = None
 
         self.convs = nn.ModuleList()
-        self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
-        self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
+        if self.attntype == 'replace':
+            #TODO VALID IMPL
+            self.convs.append(AttentionConv(in_channels=self.conv_input, out_channels=self.conv_hidden, kernel_size=4,
+                                            stride=1, padding=0, groups=1, bias=False))
+            self.convs.append(AttentionConv(in_channels=self.conv_hidden, out_channels=self.conv_output, kernel_size=6,
+                                            stride=2, padding=0, groups=1, bias=False))
+        else:
+            self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
+            self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
         if self.attntype == 'after':
             self.convs.append(AttentionConv(in_channels=4,out_channels=4,kernel_size=3,stride=1,padding=0,groups=1,bias=False))
 
@@ -56,6 +64,7 @@ class CONV_RECURRENT(nn.Module):
         for i in range(self.rnn_layers):
             if self.rnn_type == indrnn:
                 self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
+                self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
             elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
                 self.rnns.append(self.rnn_type(input_size=self.rnn_input, hidden_size=self.rnn_hidden))
             # gru/lstm(input_size, hidden_size, num_layers)
@@ -119,19 +128,18 @@ class CONV_RECURRENT(nn.Module):
         # input_seq = flight trajectory data + weather features
         # shape: [seq_len, batch_size, input_features]
         rnn_input_seq = torch.cat((x_fc_2.view(x_t.size(0),x_t.size(1),-1), x_t,), -1)
-        rnnouts = {}
-        rnnouts['rnn-out-1'] = rnn_input_seq
+        rnnout = rnn_input_seq
         for i in range(len(self.rnns)):
             if self.rnn_type == indrnn:
-                rnnouts['rnn-out{}'.format(i)] = self.rnns[i](rnnouts['rnn-out{}'.format(i - 1)])
+                rnnout = self.rnns[i](rnnout)
             elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
-                rnnouts['rnn-out{}'.format(i)], self.hidden_cell = self.rnns[i](rnnouts['rnn-out{}'.format(i - 1)])
+                rnnout, self.hidden_cell = self.rnns[i](rnnout)
 
         # feed input_seq into LSTM model
         #lstm_out, self.hidden_cell = self.lstm(lstm_input_seq, self.hidden_cell)
 
         # TODO: Dimension expansion (eq. 2l in Pang, Xu, Liu)
-        predictions = self.linear(rnnouts['rnn-out{}'.format(len(self.rnns) - 1)])
+        predictions = self.linear(rnnout)
         return predictions
 
     def save_model(self, batch_size: str, model_name: str = None):
