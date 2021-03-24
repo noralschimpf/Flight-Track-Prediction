@@ -35,7 +35,7 @@ def main():
     root_dir = 'data/'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 
-
+    '''
     # Uncomment block if generating valid file & split files
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, under_min=100)
     total_flights = len(fps)
@@ -63,7 +63,7 @@ def main():
     fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
     wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
     #TODO: eliminate train_flights    
-    '''
+
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, ToTensor(), device='cpu')
     train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=0, pin_memory=True,
@@ -75,35 +75,42 @@ def main():
     model_gru = CONV_GRU(paradigm=paradigms[1], device=dev)
     model_indrnn = CONV_INDRNN(paradigm=paradigms[1], device=dev)
     '''
-    model_lstm = CONV_RECURRENT(paradigm = paradigms[1], device=dev, rnn=torch.nn.LSTM)
+    ''' 
+   model_lstm = CONV_RECURRENT(paradigm = paradigms[1], device=dev, rnn=torch.nn.LSTM)
     model_gru = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.GRU)
     model_indrnn = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2)
     model_lstm_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.LSTM, attn='after')
     model_gru_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.GRU, attn='after')
-    model_indrnn_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2, attn='after')
+    model_indrnn_saa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2, attn='after')
+    model_indrnn_sar = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2, attn='replace')
 
+    #mdls = [model_lstm, model_gru, model_indrnn, model_lstm_sa, model_gru_sa, model_indrnn_sa]
+    mdls = [model_indrnn_sar, model_indrnn_saa]'''
 
-    mdls = [model_lstm, model_gru, model_indrnn, model_lstm_sa, model_gru_sa, model_indrnn_sa]
+    for recur in [torch.nn.LSTM, torch.nn.GRU, IndRNN_onlyrecurrent]:
+        for rnn_lay in [1, 2]:
+            for att in ['after','replace', 'None']:
+                rlay = rnn_lay
+                if recur == IndRNN_onlyrecurrent: rlay += 1
+                mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur, rnn_layers=rlay, attn=att)
+                print(mdl)
+                sttime = datetime.now()
+                print('START FIT: {}'.format(sttime))
+                fit(mdl, train_dl, epochs, train_flights)
+                mdl.epochs_trained = epochs
+                mdl.save_model(batch_size=bs)
+                edtime = datetime.now()
+                print('DONE: {}'.format(edtime - sttime))
 
-    for i in range(len(mdls)):
-        print(mdls[i])
-        sttime = datetime.now()
-        print('START FIT: {}'.format(sttime))
-        fit(mdls[i], train_dl, epochs, train_flights)
-        mdls[i].epochs_trained = epochs
-        mdls[i].save_model(batch_size=bs)
-        edtime = datetime.now()
-        print('DONE: {}'.format(edtime - sttime))
+                if not os.path.isdir('Initialized Plots/{}'.format(mdl.model_name(epochs))):
+                    os.mkdir('Initialized Plots/{}'.format(mdl.model_name(epochs)))
+                plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
+                for plot in plots_to_move:
+                    shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdl.model_name(epochs), plot))
 
-        if not os.path.isdir('Initialized Plots/{}'.format(mdls[i].model_name(epochs))):
-            os.mkdir('Initialized Plots/{}'.format(mdls[i].model_name(epochs)))
-        plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
-        for plot in plots_to_move:
-            shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdls[i].model_name(epochs), plot))
-
-        shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdls[i].model_name(bs)))
-        shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdls[i].model_name(bs)))
-        shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdls[i].model_name(bs)))
+                shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdl.model_name(bs)))
+                shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdl.model_name(bs)))
+                shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdl.model_name(bs)))
 
 
 def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',):
@@ -196,8 +203,8 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
     plt.title('Avg Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Avg Loss (MSE)')
-    plt.ylim([0, .1])
-    plt.yticks(np.linspace(0, 1, 11))
+    plt.ylim([0, .01])
+    plt.yticks(np.linspace(0, .01, 11))
     plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
     plt.close()
 
