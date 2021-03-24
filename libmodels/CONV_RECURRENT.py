@@ -4,6 +4,7 @@ import tqdm
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.Standalone_Self_Attention.attention import AttentionConv
+from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -37,16 +38,18 @@ class CONV_RECURRENT(nn.Module):
         self.convs = nn.ModuleList()
         if self.attntype == 'replace':
             #TODO VALID IMPL
-            self.convs.append(AttentionConv(in_channels=self.conv_input, out_channels=self.conv_hidden, kernel_size=4,
+            self.convs.append(MHA(d_model=200, num_heads=1, p=0, d_input=400))
+            self.convs.append(MHA(d_model=36, num_heads=1, p=0, d_input=200))
+            '''self.convs.append(AttentionConv(in_channels=self.conv_input, out_channels=self.conv_hidden, kernel_size=4,
                                             stride=1, padding=0, groups=1, bias=False))
             self.convs.append(AttentionConv(in_channels=self.conv_hidden, out_channels=self.conv_output, kernel_size=6,
-                                            stride=2, padding=0, groups=1, bias=False))
+                                            stride=2, padding=0, groups=1, bias=False))'''
         else:
             self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
             self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
         if self.attntype == 'after':
-            self.convs.append(AttentionConv(in_channels=4,out_channels=4,kernel_size=3,stride=1,padding=0,groups=1,bias=False))
-
+            self.convs.append(MHA(d_model=9, num_heads=3, p=0, d_input=9))
+            # self.convs.append(AttentionConv(in_channels=4,out_channels=4,kernel_size=3,stride=1,padding=0,groups=1,bias=False))
 
         if self.rnn_type == indrnn:
             self.fc1 = torch.nn.Linear(self.conv_output*9, self.rnn_hidden)
@@ -66,7 +69,9 @@ class CONV_RECURRENT(nn.Module):
                 self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
                 self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
             elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
-                self.rnns.append(self.rnn_type(input_size=self.rnn_input, hidden_size=self.rnn_hidden))
+                if i == 0:
+                    self.rnns.append(self.rnn_type(input_size=self.rnn_input, hidden_size=self.rnn_hidden,
+                                                   num_layers=self.rnn_layers))
             # gru/lstm(input_size, hidden_size, num_layers)
             # indrnn(hidden_size)
             # indrnns[i].indrnn_cell initialized on uniform distr. Set to coordinates in training
@@ -109,9 +114,13 @@ class CONV_RECURRENT(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
-        tmp = x_w.view(-1,1,20,20)
+        if isinstance(self.convs[0], MHA):
+            tmp = x_w.view(-1,1,400)
+        else:
+            tmp = x_w.view(-1,1,20,20)
         for i in range(len(self.convs)):
-            tmp = F.relu(self.convs[i](tmp))
+            tmp = self.convs[i](tmp)
+            tmp = torch.relu(tmp)
         '''
         x_conv_1 = F.relu(self.conv_1(x_w.view(-1,1,20,20)))
         x_conv_2 = F.relu(self.conv_2(x_conv_1))
@@ -160,10 +169,13 @@ class CONV_RECURRENT(nn.Module):
 
     def model_name(self, batch_size: int = 1):
         recurrence = str(type(self.rnns[0])).split('\'')[1].split('.')[-1]
+        recurrence = recurrence + '{}lay'.format(self.rnn_layers)
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
         convs = 'CONV-'
         if self.attntype == 'after':
-            convs = convs + 'SA-'
+            convs = convs + 'SAA-'
+        elif self.attntype == 'replace':
+            convs = convs + 'SAR-'
         model_name = '{}{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(convs, recurrence, opt, self.loss_function,
                                                                                 self.epochs_trained,
                                                                                 batch_size, self.rnn_input,
