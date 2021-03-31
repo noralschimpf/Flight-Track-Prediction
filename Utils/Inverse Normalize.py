@@ -50,8 +50,7 @@ def inv_norm(path_csv: str, path_data: str):
         df_data_denormed.to_csv('{}/Denormed/{}'.format(path_data,file))
 
 def main():
-    folders_to_denorm = [x for x in os.listdir('../Output') if os.path.isdir('../Output/{}'.format(x))]
-
+    folders_to_denorm = [x for x in os.listdir('../Output') if os.path.isdir('../Output/{}'.format(x)) and 'EPOCHS' in x]
     for folder in folders_to_denorm:
         print(folder)
         inv_norm('Data_MinMax.csv','../Output/{}'.format(folder))

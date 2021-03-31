@@ -1,5 +1,5 @@
 import torch
-import os, shutil
+import os, shutil, gc
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -8,7 +8,8 @@ from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
 from custom_dataset import ToTensor
 from libmodels.CONV_RECURRENT import CONV_RECURRENT
-from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent
+from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
+from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from torch.utils.data import DataLoader
 
 
@@ -25,15 +26,16 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 1
+    epochs = 500
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
 
-    # dev = 'cuda:1'
-    dev = 'cpu'
+    dev = 'cuda:1'
+    # dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
+
 
     '''
     # Uncomment block if generating valid file & split files
@@ -70,28 +72,11 @@ def main():
                           shuffle=False, drop_last=True)
 
     # train_model
-    '''
-    model_lstm = CONV_LSTM(paradigm=paradigms[1], device=dev)
-    model_gru = CONV_GRU(paradigm=paradigms[1], device=dev)
-    model_indrnn = CONV_INDRNN(paradigm=paradigms[1], device=dev)
-    '''
-    ''' 
-   model_lstm = CONV_RECURRENT(paradigm = paradigms[1], device=dev, rnn=torch.nn.LSTM)
-    model_gru = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.GRU)
-    model_indrnn = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2)
-    model_lstm_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.LSTM, attn='after')
-    model_gru_sa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=torch.nn.GRU, attn='after')
-    model_indrnn_saa = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2, attn='after')
-    model_indrnn_sar = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=IndRNN_onlyrecurrent, rnn_layers=2, attn='replace')
-
-    #mdls = [model_lstm, model_gru, model_indrnn, model_lstm_sa, model_gru_sa, model_indrnn_sa]
-    mdls = [model_indrnn_sar, model_indrnn_saa]'''
-
-    for recur in [torch.nn.LSTM, torch.nn.GRU, IndRNN_onlyrecurrent]:
-        for rnn_lay in [1, 2]:
+    for recur in [torch.nn.LSTM, torch.nn.GRU, indrnn]:
+        for rnn_lay in [1]:
             for att in ['after','replace', 'None']:
                 rlay = rnn_lay
-                if recur == IndRNN_onlyrecurrent: rlay += 1
+                if recur == indrnn or recur == cuda_indrnn: rlay += 1
                 mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur, rnn_layers=rlay, attn=att)
                 print(mdl)
                 sttime = datetime.now()
@@ -113,7 +98,7 @@ def main():
                 shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdl.model_name(bs)))
 
 
-def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',):
+def fit(mdl: CONV_RECURRENT, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',):
     epoch_losses = torch.zeros(epochs, device=mdl.device)
     for ep in tqdm.trange(epochs, desc='epoch', position=0, leave=False):
         losses = torch.zeros(len(flight_data), device=mdl.device)
@@ -161,7 +146,8 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
                         torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_hidden / 2)),
                         torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_hidden / 2))
                     )).view(1, -1, int(mdl.rnn_hidden))
-                elif mdl.rnn_type == IndRNN_onlyrecurrent:
+                elif mdl.rnn_type == indrnn or mdl.rnn_type == cuda_indrnn:
+                    pass
                     '''
                     #TODO: is initialization necessary for indrnn?
                     for i in range(len(mdl.rnns)):
@@ -172,7 +158,7 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
                     '''
                 y_pred = mdl(wc, fp[:])
                 single_loss = mdl.loss_function(y_pred, ft)
-                losses[batch_idx] = single_loss.view(-1)
+                losses[batch_idx] = single_loss.view(-1).detach().item()
                 single_loss.backward()
                 mdl.optimizer.step()
             if batch_idx == len(flight_data) - 1:
@@ -188,6 +174,11 @@ def fit(mdl: torch.nn.Module, flight_data: torch.utils.data.DataLoader, epochs: 
             # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
             plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
             plt.close()
+            del losses
+            gc.collect()
+        if ep % 50 == 0:
+            mdl.save_model(batch_size=flight_data.batch_size, override=True)
+
 
     if mdl.device.__contains__('cuda'):
         epoch_losses = epoch_losses.cpu()
