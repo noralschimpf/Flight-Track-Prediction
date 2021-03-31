@@ -1,6 +1,6 @@
 import torch
 import tqdm
-# from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.Standalone_Self_Attention.attention import AttentionConv
@@ -51,7 +51,7 @@ class CONV_RECURRENT(nn.Module):
             self.convs.append(MHA(d_model=9, num_heads=3, p=0, d_input=9))
             # self.convs.append(AttentionConv(in_channels=4,out_channels=4,kernel_size=3,stride=1,padding=0,groups=1,bias=False))
 
-        if self.rnn_type == indrnn:
+        if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
             self.fc1 = torch.nn.Linear(self.conv_output*9, self.rnn_hidden)
             self.fc2 = torch.nn.Linear(self.rnn_hidden, self.rnn_hidden-2)
         elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
@@ -65,7 +65,7 @@ class CONV_RECURRENT(nn.Module):
         self.rnns = nn.ModuleList()
 
         for i in range(self.rnn_layers):
-            if self.rnn_type == indrnn:
+            if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
                 self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
                 self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
             elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
@@ -83,7 +83,7 @@ class CONV_RECURRENT(nn.Module):
         elif self.rnn_type == torch.nn.GRU:
             # h_ of size (num_layers*num_directions, batch_size, hidden_size)
             self.hidden_cell = torch.zeros((self.rnn_layers * 1, 1, self.rnn_hidden))
-        elif self.rnn_type == indrnn:
+        elif self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
             # indrnn does not use an external cell state
             pass
 
@@ -139,7 +139,7 @@ class CONV_RECURRENT(nn.Module):
         rnn_input_seq = torch.cat((x_fc_2.view(x_t.size(0),x_t.size(1),-1), x_t,), -1)
         rnnout = rnn_input_seq
         for i in range(len(self.rnns)):
-            if self.rnn_type == indrnn:
+            if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
                 rnnout = self.rnns[i](rnnout)
             elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
                 rnnout, self.hidden_cell = self.rnns[i](rnnout)
@@ -151,11 +151,11 @@ class CONV_RECURRENT(nn.Module):
         predictions = self.linear(rnnout)
         return predictions
 
-    def save_model(self, batch_size: str, model_name: str = None):
+    def save_model(self, batch_size: str, model_name: str = None, override: bool = False):
         if model_name == None:
             model_name = self.model_name(batch_size=batch_size)
         model_path = 'Models/{}/{}'.format(model_name, model_name)
-        while os.path.isfile(model_path):
+        while os.path.isfile(model_path) and not override:
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
             if choice == '1':
                 break
