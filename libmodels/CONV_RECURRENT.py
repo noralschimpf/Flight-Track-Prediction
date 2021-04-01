@@ -52,12 +52,12 @@ class CONV_RECURRENT(nn.Module):
 
         if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
             self.fc1 = torch.nn.Linear(self.conv_output*9, self.rnn_hidden)
-            self.fc2 = torch.nn.Linear(self.rnn_hidden, self.rnn_hidden-2)
+            self.fc2 = torch.nn.Linear(self.rnn_hidden, self.rnn_hidden-3)
         elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
             # 64 input features, 16 output features (see sizing flow below)
             self.fc1 = torch.nn.Linear(self.conv_output * 9, self.dense_hidden)
             # 16 input features, 4 output features (see sizing flow below)
-            self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_input-2)
+            self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_input-3)
 
         ################################################################
         # IndRNN model
@@ -150,9 +150,9 @@ class CONV_RECURRENT(nn.Module):
         predictions = self.linear(rnnout)
         return predictions
 
-    def save_model(self, batch_size: str, model_name: str = None, override: bool = False):
+    def save_model(self, model_name: str = None, override: bool = False):
         if model_name == None:
-            model_name = self.model_name(batch_size=batch_size)
+            model_name = self.model_name()
         model_path = 'Models/{}/{}'.format(model_name, model_name)
         while os.path.isfile(model_path) and not override:
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
@@ -166,7 +166,7 @@ class CONV_RECURRENT(nn.Module):
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
                     'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained}, model_path)
 
-    def model_name(self, batch_size: int = 1):
+    def model_name(self):
         recurrence = str(type(self.rnns[0])).split('\'')[1].split('.')[-1]
         recurrence = recurrence + '{}lay'.format(self.rnn_layers)
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
@@ -177,6 +177,6 @@ class CONV_RECURRENT(nn.Module):
             convs = convs + 'SAR-'
         model_name = '{}{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(convs, recurrence, opt, self.loss_function,
                                                                                 self.epochs_trained,
-                                                                                batch_size, self.rnn_input,
+                                                                                self.batch_size, self.rnn_input,
                                                                                 self.rnn_hidden, self.rnn_output)
         return model_name
