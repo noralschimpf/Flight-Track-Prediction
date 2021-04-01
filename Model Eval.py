@@ -4,6 +4,7 @@ import tqdm
 import os
 from libmodels import model
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
+from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from custom_dataset import CustomDataset, ToTensor, pad_batch
 
 
@@ -55,24 +56,33 @@ def main():
             flight_losses = torch.zeros(len(test_flights))
             for idx, (fp, ft, wc) in enumerate(tqdm.tqdm(test_flights, desc='eval flights', leave=False, position=0)):
                 if mdls[i].device.__contains__('cuda'):
-                    fp = fp[:, :, 1:].cuda(device=mdls[i].device, non_blocking=True)
-                    ft = ft[:, :, 1:].cuda(device=mdls[i].device, non_blocking=True)
+                    fp = fp[:, :, :].cuda(device=mdls[i].device, non_blocking=True)
+                    ft = ft[:, :, :].cuda(device=mdls[i].device, non_blocking=True)
                     wc = wc.cuda(device=mdls[i].device, non_blocking=True)
                 else:
-                    fp, ft = fp[:,:,1:], ft[:,:,1:]
+                    fp, ft = fp[:,:,:], ft[:,:,:]
 
                 mdls[i].optimizer.zero_grad()
-                #TODO： T/except block for hidden cells
+
+                lat, lon, alt = fp[0, :, 0], fp[0, :, 1], fp[0, :, 2]
+                coordlen = int(mdls[i].rnn_hidden / 3)
+                padlen = mdls[i].rnn_hidden - 3 * coordlen
+                tns_coords = torch.cat((lat.repeat(coordlen).view(-1,test_flights.batch_size),
+                                        lon.repeat(coordlen).view(-1,test_flights.batch_size),
+                                        alt.repeat(coordlen).view(-1,test_flights.batch_size),
+                                        torch.zeros(padlen, len(lat),
+                                        device=mdls[i].device))).view(1,test_flights.batch_size,mdls[i].rnn_hidden)
+                # TODO: Abstraction (Unify recurrences within one class)
+                # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
                 if mdls[i].rnn_type == torch.nn.LSTM:
                     mdls[i].hidden_cell = (
-                        torch.repeat_interleave(fp[0, :, 0], mdls[i].rnn_hidden).view(-1, 1, mdls[i].rnn_hidden),
-                        torch.repeat_interleave(fp[0, :, 1], mdls[i].rnn_hidden).view(-1, 1, mdls[i].rnn_hidden))
+                        tns_coords.repeat(mdls[i].rnn_layers, 1, 1),
+                        tns_coords.repeat(mdls[i].rnn_layers, 1, 1))
                 elif mdls[i].rnn_type == torch.nn.GRU:
                     mdls[i].hidden_cell = torch.cat((
-                        torch.repeat_interleave(fp[0, :, 0], int(mdls[i].rnn_hidden / 2)),
-                        torch.repeat_interleave(fp[0, :, 1], int(mdls[i].rnn_hidden / 2))
-                    )).view(1, -1, int(mdls[i].rnn_hidden))
-                elif mdls[i].rnn_type == indrnn:
+                        tns_coords.repeat(mdls[i].rnn_layers, 1, 1),
+                    ))
+                elif mdls[i].rnn_type == indrnn or mdls[i].rnn_type == cuda_indrnn:
                     pass
                     '''
                     #TODO: UNECEASSARY???

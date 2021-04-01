@@ -23,8 +23,8 @@ class CustomDataset(Dataset):
         return len(self.flight_plan)
 
     def __getitem__(self, idx):
-        fp = pd.read_csv(self.flight_plan[idx], usecols=(0, 1, 2)).values
-        ft = pd.read_csv(self.flight_track[idx], usecols=(0, 1, 2)).values
+        fp = pd.read_csv(self.flight_plan[idx], usecols=(1, 2, 3)).values
+        ft = pd.read_csv(self.flight_track[idx], usecols=(1, 2, 3)).values
         wc = DSet(self.weather_cube[idx], 'r', format='netCDF4')
 
         if self.transform:
