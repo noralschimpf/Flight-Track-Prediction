@@ -76,7 +76,7 @@ def main():
     # train_model
     for recur in [torch.nn.LSTM, torch.nn.GRU, indrnn]:
         for rnn_lay in [1,2]:
-            for att in ['after','replace', 'None']:
+            for att in ['None','after', 'replace']:
                 rlay = rnn_lay
                 if recur == indrnn or recur == cuda_indrnn: rlay += 1
                 mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur,
