@@ -3,6 +3,7 @@ import os, shutil, gc
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import warnings
 import tqdm
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
@@ -22,6 +23,7 @@ from torch.utils.data import DataLoader
 
 
 def main():
+    warnings.filterwarnings('ignore')
     if os.name == 'nt':
         torch.multiprocessing.set_start_method('spawn')
 
@@ -73,11 +75,13 @@ def main():
 
     # train_model
     for recur in [torch.nn.LSTM, torch.nn.GRU, indrnn]:
-        for rnn_lay in [1]:
+        for rnn_lay in [1,2]:
             for att in ['after','replace', 'None']:
                 rlay = rnn_lay
                 if recur == indrnn or recur == cuda_indrnn: rlay += 1
-                mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur, rnn_layers=rlay, attn=att, batch_size=bs)
+                mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur,
+                                     rnn_layers=rlay, attn=att, batch_size=bs)
+                mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=2e-4)
                 print(mdl)
                 sttime = datetime.now()
                 print('START FIT: {}'.format(sttime))
