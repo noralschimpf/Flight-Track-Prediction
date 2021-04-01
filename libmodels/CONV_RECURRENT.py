@@ -3,7 +3,6 @@ import tqdm
 from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
-from libmodels.Standalone_Self_Attention.attention import AttentionConv
 from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
 import torch.nn as nn
 import torch.nn.functional as F
