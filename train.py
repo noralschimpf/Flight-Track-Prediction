@@ -107,23 +107,26 @@ def fit(mdl: CONV_RECURRENT, flight_data: torch.utils.data.DataLoader, epochs: i
                 tqdm.tqdm(flight_data, desc='flight', position=1, leave=False)):  # was len(flight_data)
             # Extract flight plan, flight track, and weather cubes
             if mdl.device.__contains__('cuda'):
-                fp = fp[:, :, 1:].cuda(device=mdl.device, non_blocking=True)
-                ft = ft[:, :, 1:].cuda(device=mdl.device, non_blocking=True)
+                fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
+                ft = ft[:, :, :].cuda(device=mdl.device, non_blocking=True)
                 wc = wc.cuda(device=mdl.device, non_blocking=True)
             else:
-                fp, ft = fp[:, :, 1:], ft[:, :, 1:]
+                fp, ft = fp[:, :, :], ft[:, :, :]
             if mdl.paradigm == 'Regression':
                 print("\nFlight {}/{}: ".format(batch_idx + 1, len(flight_data)) + str(len(fp)) + " points")
                 for pt in tqdm.trange(len(wc)):
                     mdl.optimizer.zero_grad()
-                    lat, lon = fp[0][0].clone().detach(), fp[0][1].clone().detach()
+                    lat, lon, alt = fp[0][0].clone().detach(), fp[0][1].clone().detach(). fp[0][2].clone().detach()
                     if mdl.rnn_type == torch.nn.LSTM:
                         mdl.hidden_cell = (
-                            lat.repeat(1, 1, mdl.lstm_hidden),
-                            lon.repeat(1, 1, mdl.lstm_hidden))
+                            lat.repeat(1, 1, mdl.rnn_hidden),
+                            lon.repeat(1, 1, mdl.rnn_hidden),
+                            alt.repeate(1,1,mdl.rnn_hidden))
                     elif mdl.rnn_type == torch.nn.GRU:
-                        mdl.hidden_cell = torch.cat(lat.repeat(1, 1, mdl.gru_hidden / 2),
-                                                    lon.repeat(1, 1, mdl.gru_hidden / 2))
+                        mdl.hidden_cell = torch.cat(lat.repeat(1, 1, mdl.rnn_hidden / 3),
+                                                    lon.repeat(1, 1, mdl.rnn_hidden / 3),
+                                                    alt.repeat(1, 1, mdl.rnn_hidden / 3),
+                                                    torch.zeros(1, 1, mdl.rnn_hidden - (3*int(mdl.rnn_hidden/3))))
                     y_pred = mdl(wc[:pt + 1], fp[:pt + 1])
                     # print(y_pred)
                     single_loss = mdl.loss_function(y_pred, ft[:pt + 1].view(-1, 2))
@@ -134,18 +137,24 @@ def fit(mdl: CONV_RECURRENT, flight_data: torch.utils.data.DataLoader, epochs: i
                         losses = torch.cat((losses, single_loss.view(-1)))
             elif mdl.paradigm == 'Seq2Seq':
                 mdl.optimizer.zero_grad()
-
+                lat, lon, alt = fp[0,:,0], fp[0,:,1], fp[0,:,2]
+                coordlen = int(mdl.rnn_hidden/3)
+                padlen = mdl.rnn_hidden - 3*coordlen
+                tns_coords = torch.cat((lat.repeat(coordlen).view(-1,flight_data.batch_size),
+                                        lon.repeat(coordlen).view(-1,flight_data.batch_size),
+                                        alt.repeat(coordlen).view(-1,flight_data.batch_size),
+                                        torch.zeros(padlen, len(lat),
+                                        device=mdl.device))).view(1,-1,mdl.rnn_hidden)
                 # TODO: Abstraction (Unify recurrences within one class)
                 # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
                 if mdl.rnn_type == torch.nn.LSTM:
                     mdl.hidden_cell = (
-                        torch.repeat_interleave(fp[0, :, 0], mdl.rnn_hidden).view(-1, 1, mdl.rnn_hidden),
-                        torch.repeat_interleave(fp[0, :, 1], mdl.rnn_hidden).view(-1, 1, mdl.rnn_hidden))
+                        tns_coords.repeat(mdl.rnn_layers,1,1),
+                        tns_coords.repeat(mdl.rnn_layers,1,1))
                 elif mdl.rnn_type == torch.nn.GRU:
                     mdl.hidden_cell = torch.cat((
-                        torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_hidden / 2)),
-                        torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_hidden / 2))
-                    )).view(1, -1, int(mdl.rnn_hidden))
+                        tns_coords.repeat(mdl.rnn_layers,1,1),
+                    ))
                 elif mdl.rnn_type == indrnn or mdl.rnn_type == cuda_indrnn:
                     pass
                     '''
