@@ -12,14 +12,15 @@ import os
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
-                 dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=2,
-                 attn='None',
+                 dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
+                 attn='None', batch_size=1,
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
         # convolution layer for weather feature extraction prior to the RNN
         self.device = device
         self.paradigm = paradigm
         self.attntype = attn
+        self.batch_size = batch_size
 
         self.conv_input = conv_input
         self.conv_hidden = conv_hidden
@@ -164,7 +165,8 @@ class CONV_RECURRENT(nn.Module):
         if not os.path.isdir('Models/{}'.format(model_name)):
             os.mkdir('Models/{}'.format(model_name))
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
-                    'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained}, model_path)
+                    'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained,
+                    'batch_size': self.batch_size}, model_path)
 
     def model_name(self):
         recurrence = str(type(self.rnns[0])).split('\'')[1].split('.')[-1]
