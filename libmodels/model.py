@@ -12,7 +12,7 @@ def load_model(model_path: str):
                         dense_hidden=struct['dense_hidden'], dense_output=struct['dense_output'],
          rnn= struct['rnn_type'], rnn_layers=struct['rnn_layers'], rnn_input=struct['rnn_input'],
                         rnn_hidden=struct['rnn_hidden'], rnn_output=struct['rnn_output'], attn=struct['attntype'],
-         optim=struct['optim'], loss=struct['loss_fn'], eptrained=dicts['epochs_trained']
+         optim=struct['optim'], loss=struct['loss_fn'], eptrained=dicts['epochs_trained'], batch_size=dicts['batch_size']
         )
     mdl.load_state_dict(state_dict)
     mdl.optimizer.load_state_dict(opt_dict)

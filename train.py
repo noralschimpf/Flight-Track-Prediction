@@ -77,25 +77,25 @@ def main():
             for att in ['after','replace', 'None']:
                 rlay = rnn_lay
                 if recur == indrnn or recur == cuda_indrnn: rlay += 1
-                mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur, rnn_layers=rlay, attn=att)
+                mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur, rnn_layers=rlay, attn=att, batch_size=bs)
                 print(mdl)
                 sttime = datetime.now()
                 print('START FIT: {}'.format(sttime))
                 fit(mdl, train_dl, epochs, train_flights)
                 mdl.epochs_trained = epochs
-                mdl.save_model(batch_size=bs)
+                mdl.save_model()
                 edtime = datetime.now()
                 print('DONE: {}'.format(edtime - sttime))
 
-                if not os.path.isdir('Initialized Plots/{}'.format(mdl.model_name(epochs))):
-                    os.mkdir('Initialized Plots/{}'.format(mdl.model_name(epochs)))
+                if not os.path.isdir('Initialized Plots/{}'.format(mdl.model_name())):
+                    os.mkdir('Initialized Plots/{}'.format(mdl.model_name()))
                 plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
                 for plot in plots_to_move:
-                    shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdl.model_name(epochs), plot))
+                    shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}'.format(mdl.model_name(), plot))
 
-                shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdl.model_name(bs)))
-                shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdl.model_name(bs)))
-                shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdl.model_name(bs)))
+                shutil.copy('test_flight_samples.txt', 'Models/{}/test_flight_samples.txt'.format(mdl.model_name()))
+                shutil.copy('train_flight_samples.txt', 'Models/{}/train_flight_samples.txt'.format(mdl.model_name()))
+                shutil.move('model_epoch_losses.txt', 'Models/{}/model_epoch_losses.txt'.format(mdl.model_name()))
 
 
 def fit(mdl: CONV_RECURRENT, flight_data: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default',):
@@ -186,7 +186,7 @@ def fit(mdl: CONV_RECURRENT, flight_data: torch.utils.data.DataLoader, epochs: i
             del losses
             gc.collect()
         if ep % 50 == 0:
-            mdl.save_model(batch_size=flight_data.batch_size, override=True)
+            mdl.save_model(override=True)
 
 
     if mdl.device.__contains__('cuda'):

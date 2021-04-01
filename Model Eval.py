@@ -46,7 +46,7 @@ def main():
 
     # begin validation
     for i in range(len(mdls)):
-        mdlname = mdls[i].model_name(batch_size=1)
+        mdlname = mdls[i].model_name()
         if not os.path.isdir('Output/{}'.format(mdlname)):
             os.mkdir('Output/{}'.format(mdlname))
 
