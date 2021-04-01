@@ -151,6 +151,27 @@ class CONV_RECURRENT(nn.Module):
         predictions = self.linear(rnnout)
         return predictions
 
+    def init_hidden_cell(self, tns_coords: torch.Tensor):
+        # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
+        if self.rnn_type == torch.nn.LSTM:
+            self.hidden_cell = (
+                tns_coords.repeat(self.rnn_layers, 1, 1),
+                tns_coords.repeat(self.rnn_layers, 1, 1))
+        elif self.rnn_type == torch.nn.GRU:
+            self.hidden_cell = torch.cat((
+                tns_coords.repeat(self.rnn_layers, 1, 1),
+            ))
+        elif self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
+            pass
+            '''
+            #TODO: is initialization necessary for indrnn?
+            for i in range(len(mdl.rnns)):
+                mdl.rnns[i].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
+                    torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_input / 2)),
+                    torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_input / 2))
+                )))
+            '''
+
     def save_model(self, model_name: str = None, override: bool = False):
         if model_name == None:
             model_name = self.model_name()

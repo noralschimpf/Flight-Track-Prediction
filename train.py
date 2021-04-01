@@ -84,6 +84,7 @@ def main():
                 fit(mdl, train_dl, epochs, train_flights)
                 mdl.epochs_trained = epochs
                 mdl.save_model()
+                shutil.rmtree('Models/{}'.format(mdl.model_name().replace('EPOCHS{}'.format(epochs),'EPOCHS0')))
                 edtime = datetime.now()
                 print('DONE: {}'.format(edtime - sttime))
 
@@ -137,39 +138,23 @@ def fit(mdl: CONV_RECURRENT, flight_data: torch.utils.data.DataLoader, epochs: i
                         losses = torch.cat((losses, single_loss.view(-1)))
             elif mdl.paradigm == 'Seq2Seq':
                 mdl.optimizer.zero_grad()
+
                 lat, lon, alt = fp[0,:,0], fp[0,:,1], fp[0,:,2]
                 coordlen = int(mdl.rnn_hidden/3)
                 padlen = mdl.rnn_hidden - 3*coordlen
-                tns_coords = torch.cat((lat.repeat(coordlen).view(-1,flight_data.batch_size),
+                tns_coords = torch.vstack((lat.repeat(coordlen).view(-1,flight_data.batch_size),
                                         lon.repeat(coordlen).view(-1,flight_data.batch_size),
                                         alt.repeat(coordlen).view(-1,flight_data.batch_size),
                                         torch.zeros(padlen, len(lat),
-                                        device=mdl.device))).view(1,-1,mdl.rnn_hidden)
-                # TODO: Abstraction (Unify recurrences within one class)
-                # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
-                if mdl.rnn_type == torch.nn.LSTM:
-                    mdl.hidden_cell = (
-                        tns_coords.repeat(mdl.rnn_layers,1,1),
-                        tns_coords.repeat(mdl.rnn_layers,1,1))
-                elif mdl.rnn_type == torch.nn.GRU:
-                    mdl.hidden_cell = torch.cat((
-                        tns_coords.repeat(mdl.rnn_layers,1,1),
-                    ))
-                elif mdl.rnn_type == indrnn or mdl.rnn_type == cuda_indrnn:
-                    pass
-                    '''
-                    #TODO: is initialization necessary for indrnn?
-                    for i in range(len(mdl.rnns)):
-                        mdl.rnns[i].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
-                            torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_input / 2)),
-                            torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_input / 2))
-                        )))
-                    '''
+                                        device=mdl.device))).T.view(1,-1,mdl.rnn_hidden)
+                mdl.init_hidden_cell(tns_coords)
+
                 y_pred = mdl(wc, fp[:])
                 single_loss = mdl.loss_function(y_pred, ft)
                 losses[batch_idx] = single_loss.view(-1).detach().item()
                 single_loss.backward()
                 mdl.optimizer.step()
+
             if batch_idx == len(flight_data) - 1:
                 epoch_losses[ep] = torch.mean(losses).view(-1)
 
