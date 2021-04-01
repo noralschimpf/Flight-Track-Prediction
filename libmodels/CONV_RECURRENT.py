@@ -40,16 +40,17 @@ class CONV_RECURRENT(nn.Module):
             #TODO VALID IMPL
             self.convs.append(MHA(d_model=200, num_heads=1, p=0, d_input=400))
             self.convs.append(MHA(d_model=36, num_heads=1, p=0, d_input=200))
-            '''self.convs.append(AttentionConv(in_channels=self.conv_input, out_channels=self.conv_hidden, kernel_size=4,
-                                            stride=1, padding=0, groups=1, bias=False))
-            self.convs.append(AttentionConv(in_channels=self.conv_hidden, out_channels=self.conv_output, kernel_size=6,
-                                            stride=2, padding=0, groups=1, bias=False))'''
+            self.convs.append(MHA(d_model=9,num_heads=3,p=0,d_input=9))
+
+        elif self.attntype == 'after':
+            self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
+            self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
+            self.convs.append(MHA(d_model=9, num_heads=3, p=0, d_input=9))
+
         else:
             self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
             self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
-        if self.attntype == 'after':
-            self.convs.append(MHA(d_model=9, num_heads=3, p=0, d_input=9))
-            # self.convs.append(AttentionConv(in_channels=4,out_channels=4,kernel_size=3,stride=1,padding=0,groups=1,bias=False))
+            self.convs.append(torch.nn.Conv2d(self.conv_output, self.conv_output, kernel_size=1, stride=1))
 
         if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
             self.fc1 = torch.nn.Linear(self.conv_output*9, self.rnn_hidden)
