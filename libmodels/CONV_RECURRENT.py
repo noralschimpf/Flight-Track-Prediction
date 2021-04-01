@@ -38,14 +38,15 @@ class CONV_RECURRENT(nn.Module):
         self.convs = nn.ModuleList()
         if self.attntype == 'replace':
             #TODO VALID IMPL
-            self.convs.append(MHA(d_model=200, num_heads=1, p=0, d_input=400))
-            self.convs.append(MHA(d_model=36, num_heads=1, p=0, d_input=200))
-            self.convs.append(MHA(d_model=9,num_heads=3,p=0,d_input=9))
+            self.convs.append(MHA(d_model=128, num_heads=2, p=0, d_input=400))
+            self.convs.append(MHA(d_model=36, num_heads=4, p=0, d_input=128))
+            self.convs.append(MHA(d_model=36,num_heads=3,p=0,d_input=36))
 
         elif self.attntype == 'after':
             self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
             self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
-            self.convs.append(MHA(d_model=9, num_heads=3, p=0, d_input=9))
+            self.convs.append(torch.nn.Flatten(1,-1))
+            self.convs.append(MHA(d_model=36, num_heads=3, p=0, d_input=36))
 
         else:
             self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
