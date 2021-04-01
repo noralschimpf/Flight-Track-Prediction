@@ -81,9 +81,10 @@ def main():
                     y_pred, fp, ft = y_pred.cpu(), fp.cpu(), ft.cpu()
                 y_pred, fp, ft = y_pred.detach().numpy(), fp.detach().numpy(), ft.detach().numpy()
 
-                df_flight = pd.DataFrame(data={'flight plan LAT': fp[:,0, 0], 'flight plan LON': fp[:,0, 1],
-                                               'prediction LAT': y_pred[:,0, 0], 'prediction LON': y_pred[:,0, 1],
-                                               'actual LAT': ft[:,0, 0], 'actual LON': ft[:,0, 1]})
+                df_flight = pd.DataFrame(data=
+                                 {'flight plan LAT': fp[:,0, 0], 'flight plan LON': fp[:,0, 1], 'flight plan ALT': fp[:,0,2],
+                                   'prediction LAT': y_pred[:,0, 0], 'prediction LON': y_pred[:,0, 1], 'pretion ALT': y_pred[:,0,2],
+                                   'actual LAT': ft[:,0, 0], 'actual LON': ft[:,0, 1], 'actual ALT': ft[:,0,2]})
                 df_flight.to_csv('Output/{}/eval {}'.format(mdlname, flight_data.get_flightname(idx)))
 
             if mdls[i].device.__contains__('cuda'):

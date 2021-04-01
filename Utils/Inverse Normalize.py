@@ -15,10 +15,6 @@ def inv_norm(path_csv: str, path_data: str):
     lat_min, lat_max = nda_minmaxes[0,:].min(), nda_minmaxes[0,:].max()
     lon_min, lon_max = nda_minmaxes[1, :].min(), nda_minmaxes[1, :].max()
     alt_min, alt_max = nda_minmaxes[2, :].min(), nda_minmaxes[2, :].max()
-    '''DEPRECATED
-    lat_scaler.fit(np.array([lat_min, lat_max]).reshape(-1,1))
-    lon_scaler.fit(np.array([lon_min, lon_max]).reshape(-1,1))
-    alt_scaler.fit(np.array([alt_min, alt_max]).reshape(-1,1))'''
 
     # Correct Norm/Denorm fit
     lat_scaler.fit(nda_minmaxes[0,:].reshape(-1,1))
@@ -37,16 +33,22 @@ def inv_norm(path_csv: str, path_data: str):
 
         nda_data_denormed = np.zeros_like(nda_data)
         nda_data_denormed[:, 0] = lat_scaler.inverse_transform(nda_data[:, 0].reshape(-1,1)).reshape(-1)
-        nda_data_denormed[:, 2] = lat_scaler.inverse_transform(nda_data[:, 2].reshape(-1,1)).reshape(-1)
-        nda_data_denormed[:, 4] = lat_scaler.inverse_transform(nda_data[:, 4].reshape(-1,1)).reshape(-1)
+        nda_data_denormed[:, 3] = lat_scaler.inverse_transform(nda_data[:, 3].reshape(-1,1)).reshape(-1)
+        nda_data_denormed[:, 6] = lat_scaler.inverse_transform(nda_data[:, 6].reshape(-1,1)).reshape(-1)
         nda_data_denormed[:, 1] = lon_scaler.inverse_transform(nda_data[:, 1].reshape(-1,1)).reshape(-1)
-        nda_data_denormed[:, 3] = lon_scaler.inverse_transform(nda_data[:, 3].reshape(-1,1)).reshape(-1)
-        nda_data_denormed[:, 5] = lon_scaler.inverse_transform(nda_data[:, 5].reshape(-1,1)).reshape(-1)
+        nda_data_denormed[:, 4] = lon_scaler.inverse_transform(nda_data[:, 4].reshape(-1,1)).reshape(-1)
+        nda_data_denormed[:, 7] = lon_scaler.inverse_transform(nda_data[:, 7].reshape(-1,1)).reshape(-1)
+        nda_data_denormed[:, 2] = alt_scaler.inverse_transform(nda_data[:, 2].reshape(-1, 1)).reshape(-1)
+        nda_data_denormed[:, 5] = alt_scaler.inverse_transform(nda_data[:, 5].reshape(-1, 1)).reshape(-1)
+        nda_data_denormed[:, 8] = alt_scaler.inverse_transform(nda_data[:, 8].reshape(-1, 1)).reshape(-1)
 
         df_data_denormed = pd.DataFrame(
             data={'flight plan LAT': nda_data_denormed[:,0], 'flight plan LON': nda_data_denormed[:,1],
-                  'predicted LAT': nda_data_denormed[:,2], 'predicted LON': nda_data_denormed[:,3],
-                  'actual LAT': nda_data_denormed[:,4], 'actual LON': nda_data_denormed[:,5]})
+                            'flight plan ALT': nda_data_denormed[:,2],
+                  'predicted LAT': nda_data_denormed[:,3], 'predicted LON': nda_data_denormed[:,4],
+                            'predicted ALT': nda_data_denormed[:,5],
+                  'actual LAT': nda_data_denormed[:,6], 'actual LON': nda_data_denormed[:,7],
+                            'actual ALT': nda_data_denormed[:,8]})
         df_data_denormed.to_csv('{}/Denormed/{}'.format(path_data,file))
 
 def main():
