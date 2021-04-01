@@ -67,31 +67,13 @@ def main():
                 lat, lon, alt = fp[0, :, 0], fp[0, :, 1], fp[0, :, 2]
                 coordlen = int(mdls[i].rnn_hidden / 3)
                 padlen = mdls[i].rnn_hidden - 3 * coordlen
-                tns_coords = torch.cat((lat.repeat(coordlen).view(-1,test_flights.batch_size),
-                                        lon.repeat(coordlen).view(-1,test_flights.batch_size),
-                                        alt.repeat(coordlen).view(-1,test_flights.batch_size),
-                                        torch.zeros(padlen, len(lat),
-                                        device=mdls[i].device))).view(1,test_flights.batch_size,mdls[i].rnn_hidden)
-                # TODO: Abstraction (Unify recurrences within one class)
-                # hidden cell (h_, c_) sizes: [num_layers*num_directions, batch_size, hidden_size]
-                if mdls[i].rnn_type == torch.nn.LSTM:
-                    mdls[i].hidden_cell = (
-                        tns_coords.repeat(mdls[i].rnn_layers, 1, 1),
-                        tns_coords.repeat(mdls[i].rnn_layers, 1, 1))
-                elif mdls[i].rnn_type == torch.nn.GRU:
-                    mdls[i].hidden_cell = torch.cat((
-                        tns_coords.repeat(mdls[i].rnn_layers, 1, 1),
-                    ))
-                elif mdls[i].rnn_type == indrnn or mdls[i].rnn_type == cuda_indrnn:
-                    pass
-                    '''
-                    #TODO: UNECEASSARY???
-                    for j in range(len(mdls[i].rnns)):
-                        mdls[i].rnns[j].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
-                            torch.repeat_interleave(fp[0, :, 0], int(mdls[i].rnn_input / 2)),
-                            torch.repeat_interleave(fp[0, :, 1], int(mdls[i].rnn_input / 2))
-                        )))
-                    '''
+                tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, test_flights.batch_size),
+                                           lon.repeat(coordlen).view(-1, test_flights.batch_size),
+                                           alt.repeat(coordlen).view(-1, test_flights.batch_size),
+                                           torch.zeros(padlen, len(lat),
+                                                   device=mdls[i].device))).T.view(1, -1, mdls[i].rnn_hidden)
+                mdls[i].init_hidden_cell(tns_coords)
+
                 y_pred = mdls[i](wc, fp)
                 flight_losses[idx] = mdls[i].loss_function(y_pred, ft)
 
