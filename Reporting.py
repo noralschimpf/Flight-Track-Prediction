@@ -84,7 +84,6 @@ for mdl in mdls:
                 plt.savefig('Output/{}/Figs/2D {}.png'.format(mdl,evals[e]), dpi=300)
                 plt.close()
 
-                #TODO： 4D Visuals
                 fig = plt.figure(); ax = plt.axes(projection='3d')
                 ax.plot(nda_fp[:, 1], nda_fp[:, 0],nda_fp[:,2], color='blue',
                            label='flight plan L2-Norm: {:.3f}'.format(l2_fps_2d[e]))
