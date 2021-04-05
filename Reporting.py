@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
+from mpl_toolkits import mplot3d
 import Utils.ErrorFn as fn
 
 # Plots: Trajectories v. Known, MSE of each Flight in Test Data
@@ -62,28 +63,42 @@ for mdl in mdls:
 
             # plot trajectory v flight plan v actual, include mse, reduction in title and norms in legend
 
-            '''
-            reduction_2d = fn.reduction(l2_fps_2d[e], l2_preds_2d[e])
-            reduction_3d = fn.reduction(l2_fps_3d[e], l2_preds_3d[e])
-            m = Basemap(width=6000000, height=4000000,
-                        area_thresh=10000, projection='lcc',
-                        lat_0=38., lon_0=-98., lat_1=25.)
-            parallels = np.arange(0.,80.,10.)
-            meridians = np.arange(10.,351.,20.)
-            m.drawcoastlines()
-            m.drawparallels(parallels, labels=[False, True, True, False])
-            m.drawmeridians(meridians, labels=[True, False, False, True])
-            fig2 = plt.gca()
+            if e%10 == 0:
+                reduction_2d = fn.reduction(l2_fps_2d[e], l2_preds_2d[e])
+                reduction_3d = fn.reduction(l2_fps_3d[e], l2_preds_3d[e])
+                m = Basemap(width=6000000, height=4000000,
+                            area_thresh=10000, projection='lcc',
+                            lat_0=38., lon_0=-98., lat_1=25.)
+                parallels = np.arange(0.,80.,10.)
+                meridians = np.arange(10.,351.,20.)
+                m.drawcoastlines()
+                m.drawparallels(parallels, labels=[False, True, True, False])
+                m.drawmeridians(meridians, labels=[True, False, False, True])
+                fig2 = plt.gca()
 
-            a = m.plot(nda_fp[:,1], nda_fp[:,0], latlon=True, color='blue', alpha=.5, label='flight plan L2-Norm: {:.3f}'.format(l2_fps[e]))
-            b = m.plot(nda_pred[:,1], nda_pred[:,0], latlon=True, color='green', alpha=.5, label='prediction L2-Norm: {:.3f}'.format(l2_preds[e]))
-            c = m.plot(nda_act[:,1], nda_act[:,0], latlon=True, color='red', alpha=.5, label='actual')
-            plt.legend()
-            plt.title("{}\nMSE: {:.4f}   Reduction: {:.3f}".format(evals[e][5:-4], mse_loss[0], reduction * 100))
-            plt.savefig('Output/{}/Figs/{}.png'.format(mdl,evals[e]), dpi=300)
-            plt.close()'''
+                a = m.plot(nda_fp[:,1], nda_fp[:,0], latlon=True, color='blue', alpha=.5, label='flight plan L2-Norm: {:.3f}'.format(l2_fps_2d[e]))
+                b = m.plot(nda_pred[:,1], nda_pred[:,0], latlon=True, color='green', alpha=.5, label='prediction L2-Norm: {:.3f}'.format(l2_preds_2d[e]))
+                c = m.plot(nda_act[:,1], nda_act[:,0], latlon=True, color='red', alpha=.5, label='actual')
+                plt.legend()
+                plt.title("{}\nMSE: {:.4f}   Reduction: {:.3f}".format(evals[e][5:-4], mse_loss[0], reduction_2d * 100))
+                plt.savefig('Output/{}/Figs/2D {}.png'.format(mdl,evals[e]), dpi=300)
+                plt.close()
 
-            #TODO： 4D Visuals
+                #TODO： 4D Visuals
+                fig = plt.figure(); ax = plt.axes(projection='3d')
+                ax.plot(nda_fp[:, 1], nda_fp[:, 0],nda_fp[:,2], color='blue',
+                           label='flight plan L2-Norm: {:.3f}'.format(l2_fps_2d[e]))
+                ax.plot(nda_pred[:, 1], nda_pred[:, 0], nda_pred[:,2], color='green',
+                         label='prediction L2-Norm: {:.3f}'.format(l2_preds_2d[e]))
+                ax.plot(nda_act[:, 1], nda_act[:, 0], nda_act[:,2], color='red', label='actual')
+                ax.set_xlabel('degrees latitude')
+                ax.set_ylabel('degree longitude')
+                ax.set_zlabel('altitude (ft)')
+                plt.legend(); plt.title("{}\nMSE: {:.4f}   Reduction: {:.3f}".format(evals[e][5:-4], mse_loss[0], reduction_3d * 100))
+                fig.tight_layout()
+                plt.savefig('Output/{}/Figs/3D {}.png'.format(mdl, evals[e]), dpi=300)
+                plt.close(); fig.clf(); ax.cla();
+
 
         else:
             print('MISSING {}'.format(evals[e]))
@@ -115,7 +130,7 @@ for mdl in mdls:
     plt.hist(phe_nmi_fps, bins=50, alpha=.5, label='Flight Plans', density=True)
     plt.hist(phe_nmi_preds, bins=50, alpha=.5, label='Predictions', density=True)
     plt.legend(); plt.xlabel('Error (nmi)');
-    plt.title('Pointwise Horizontal Errors\n:{} Points'.format(len(phe_nmi_fps)))
+    plt.title('Pointwise Horizontal Errors\n{} Points'.format(len(phe_nmi_fps)))
     plt.savefig('Output/{}/Figs/PHE Hist.png'.format(mdl), dpi=300)
     plt.close()
 
