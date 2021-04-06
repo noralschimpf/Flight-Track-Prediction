@@ -86,8 +86,9 @@ class CONV_RECURRENT(nn.Module):
             # h_ of size (num_layers*num_directions, batch_size, hidden_size)
             self.hidden_cell = torch.zeros((self.rnn_layers * 1, 1, self.rnn_hidden))
         elif self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
-            # indrnn does not use an external cell state
-            pass
+            # h_ of size (num_lay, batch, hidden_size)
+            self.hidden_cell = torch.zeros((self.rnn_layers*1, 1, self.rnn_hidden))
+
 
         self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
 
@@ -141,9 +142,14 @@ class CONV_RECURRENT(nn.Module):
         rnn_input_seq = torch.cat((x_fc_2.view(x_t.size(0),x_t.size(1),-1), x_t,), -1)
         rnnout = rnn_input_seq
         for i in range(len(self.rnns)):
-            if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
+            if isinstance(self.rnns[i], indrnn) or isinstance(self.rnns[i], cuda_indrnn):
+                rnnlay = 0
+                for j in range(len(self.rnns[:i])):
+                    if isinstance(self.rnns[j], indrnn) or isinstance(self.rnns[j], cuda_indrnn): rnnlay += 1
+                rnnout = self.rnns[i](rnnout, self.hidden_cell[rnnlay])
+            elif isinstance(self.rnns[i], BatchNorm):
                 rnnout = self.rnns[i](rnnout)
-            elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
+            elif isinstance(self.rnns[i], torch.nn.LSTM) or isinstance(self.rnns[i], torch.nn.GRU):
                 rnnout, self.hidden_cell = self.rnns[i](rnnout)
 
         # feed input_seq into LSTM model
@@ -164,15 +170,9 @@ class CONV_RECURRENT(nn.Module):
                 tns_coords.repeat(self.rnn_layers, 1, 1),
             ))
         elif self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
-            pass
-            '''
-            #TODO: is initialization necessary for indrnn?
-            for i in range(len(mdl.rnns)):
-                mdl.rnns[i].indrnn_cell.weight_hh = torch.nn.Parameter(torch.cat((
-                    torch.repeat_interleave(fp[0, :, 0], int(mdl.rnn_input / 2)),
-                    torch.repeat_interleave(fp[0, :, 1], int(mdl.rnn_input / 2))
-                )))
-            '''
+            #h_ = [layers, batch, hidden_size]
+            self.hidden_cell = torch.cat((tns_coords.repeat(self.rnn_layers, 1, 1),))
+
 
     def save_model(self, model_name: str = None, override: bool = False):
         if model_name == None:
