@@ -20,7 +20,7 @@ def main():
     dev = 'cuda:1'
 
     # open model and data
-    mdl_paths = [os.path.join(os.path.abspath('.'),'Models/{}/{}'.format(x,x)) for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and x.__contains__('EPOCHS')]
+    mdl_paths = [os.path.join(os.path.abspath('.'),'Models/{}/{}'.format(x,x)) for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCHS' in x]
     mdl_dirs = ['/'.join(x.split('/')[:-1]) for x in mdl_paths]
     mdls = []
 
