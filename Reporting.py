@@ -21,7 +21,7 @@ for mdl in mdls:
         os.mkdir('Output/{}/Figs'.format(mdl))
 
 
-    df_flight_losses = pd.read_csv('Models/{}/flight losses.txt'.format(mdl))
+    df_flight_losses = pd.read_csv('Models/{}/total flight losses.txt'.format(mdl))
     evals = [x for x in os.listdir('Output/{}/Denormed'.format(mdl))
                if os.path.isfile('Output/{}/Denormed/{}'.format(mdl, x))]
 
