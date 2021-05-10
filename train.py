@@ -87,14 +87,17 @@ def main():
 
         # train_model
         for recur in [torch.nn.LSTM, torch.nn.GRU, indrnn]:
+        #for recur in [torch.nn.LSTM, indrnn]:
             for rnn_lay in [1,2]:
-                for att in ['None','after', 'replace']:
+            #for rnn_lay in [2]:
+                #for att in ['None','after', 'replace']:
+                for att in ['None']:
                     rlay = rnn_lay
                     if recur == indrnn or recur == cuda_indrnn: rlay += 1
                     mdl = CONV_RECURRENT(paradigm=paradigms[1], device=dev, rnn=recur,
-                                         rnn_layers=rlay, attn=att, batch_size=bs)
+                                         rnn_layers=rlay, attn=att, batch_size=bs, droprate=.5)
                     mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=2e-4)
-                    #print(mdl)
+                    print(mdl)
                     sttime = datetime.now()
                     #print('START FIT: {}'.format(sttime))
                     fit(mdl, train_dl, test_dl, epochs, train_flights)
@@ -127,7 +130,7 @@ def main():
 def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default', ):
     epoch_losses = torch.zeros(epochs, device=mdl.device)
     epoch_test_losses = torch.zeros(epochs, device=mdl.device)
-    for ep in tqdm.trange(epochs, desc='epoch', position=0, leave=False):
+    for ep in tqdm.trange(epochs, desc='{} epoch'.format(mdl.model_name().replace('-OPTAdam','').replace('LOSS','')), position=0, leave=False):
         losses = torch.zeros(len(train_dl), device=mdl.device)
 
         for batch_idx, (fp, ft, wc) in enumerate(
