@@ -1,6 +1,7 @@
 import torch
 import tqdm
-from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+#from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
@@ -11,9 +12,9 @@ import os
 
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
-    def __init__(self, paradigm='Seq2Seq', device='cpu', conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
+    def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
                  dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
-                 attn='None', batch_size=1, droprate = .2,
+                 attn='None', batch_size=1, droprate = .2, num_features: int = 1,
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
         # convolution layer for weather feature extraction prior to the RNN
@@ -22,12 +23,13 @@ class CONV_RECURRENT(nn.Module):
         self.attntype = attn
         self.batch_size = batch_size
         self.droprate = droprate
+        self.num_features = num_features
+        self.cube_height = cube_height
 
         self.conv_input = conv_input
         self.conv_hidden = conv_hidden
         self.conv_output = conv_output
         self.dense_hidden = dense_hidden
-        self.dense_output = dense_output
 
         self.rnn_type = rnn
         self.rnn_layers = rnn_layers
@@ -38,32 +40,34 @@ class CONV_RECURRENT(nn.Module):
 
 
         self.convs = nn.ModuleList()
-        if self.attntype == 'replace':
-            #TODO VALID IMPL
-            self.convs.append(MHA(d_model=128, num_heads=2, p=0, d_input=400))
-            self.convs.append(MHA(d_model=36, num_heads=4, p=0, d_input=128))
-            self.convs.append(torch.nn.Dropout(self.droprate))
-            self.convs.append(MHA(d_model=36,num_heads=3,p=0,d_input=36))
+        for i in range(self.num_features):
+            extractor = nn.ModuleList()
+            if self.attntype == 'replace':
+                extractor.append(MHA(d_model=128, num_heads=2, p=0, d_input=self.conv_input * self.cube_height * 400))
+                extractor.append(MHA(d_model=36, num_heads=4, p=0, d_input=128))
+                extractor.append(torch.nn.Dropout(self.droprate))
+                extractor.append(MHA(d_model=self.conv_output*9,num_heads=3,p=0,d_input=36))
 
-        elif self.attntype == 'after':
-            self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
-            self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
-            self.convs.append(torch.nn.Flatten(1,-1))
-            self.convs.append(torch.nn.Dropout(self.droprate))
-            self.convs.append(MHA(d_model=36, num_heads=3, p=0, d_input=36))
+            elif self.attntype == 'after':
+                extractor.append(torch.nn.Conv3d(self.conv_input, self.conv_hidden, kernel_size=(self.cube_height, 6, 6), stride=2))
+                extractor.append(torch.nn.Conv3d(self.conv_hidden, self.conv_output, kernel_size=(1,3,3), stride=2))
+                extractor.append(torch.nn.Flatten(1,-1))
+                extractor.append(torch.nn.Dropout(self.droprate))
+                extractor.append(MHA(d_model=self.conv_output*9, num_heads=3, p=0, d_input=36))
 
-        else:
-            self.convs.append(torch.nn.Conv2d(self.conv_input, self.conv_hidden, kernel_size=6, stride=2))
-            self.convs.append(torch.nn.Conv2d(self.conv_hidden, self.conv_output, kernel_size=3, stride=2))
-            self.convs.append(torch.nn.Dropout(self.droprate))
-            self.convs.append(torch.nn.Conv2d(self.conv_output, self.conv_output, kernel_size=1, stride=1))
+            else:
+                extractor.append(torch.nn.Conv3d(self.conv_input, self.conv_hidden, kernel_size=(self.cube_height, 6, 6), stride=2))
+                extractor.append(torch.nn.Conv3d(self.conv_hidden, self.conv_output, kernel_size=(1,3,3), stride=2))
+                extractor.append(torch.nn.Dropout(self.droprate))
+                extractor.append(torch.nn.Conv3d(self.conv_output, self.conv_output, kernel_size=(1,1,1), stride=1))
+            self.convs.append(extractor)
 
         if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
-            self.fc1 = torch.nn.Linear(self.conv_output*9, self.rnn_hidden)
-            self.fc2 = torch.nn.Linear(self.rnn_hidden, self.rnn_hidden-3)
+            self.fc1 = torch.nn.Linear(self.num_features * self.conv_output*9, self.dense_hidden)
+            self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_hidden-3)
         elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
             # 64 input features, 16 output features (see sizing flow below)
-            self.fc1 = torch.nn.Linear(self.conv_output * 9, self.dense_hidden)
+            self.fc1 = torch.nn.Linear(self.num_features * self.conv_output * 9, self.dense_hidden)
             # 16 input features, 4 output features (see sizing flow below)
             self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_input-3)
 
@@ -116,7 +120,7 @@ class CONV_RECURRENT(nn.Module):
                             'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
                             'conv_output': self.conv_output, 'attntype': self.attntype,
-                            'dense_hidden': self.dense_hidden, 'dense_output': self.dense_output,
+                            'dense_hidden': self.dense_hidden, 'num_features': self.num_features,
                             'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
                             'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
                             'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
@@ -127,20 +131,40 @@ class CONV_RECURRENT(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
-        if isinstance(self.convs[0], MHA):
-            tmp = x_w.view(-1,1,400)
+        #TODO: VALIDATE FORWARD PASS FOR ALL MODEL TYPES
+        if isinstance(self.convs[0][0], MHA):
+            conv_outs = {'cnv-1':x_w.view(x_w.shape[0], self.num_features, -1, self.cube_height*400)}
         else:
-            tmp = x_w.view(-1,1,20,20)
-        for i in range(len(self.convs)):
-            tmp = self.convs[i](tmp)
-            tmp = torch.relu(tmp)
-        '''
-        x_conv_1 = F.relu(self.conv_1(x_w.view(-1,1,20,20)))
-        x_conv_2 = F.relu(self.conv_2(x_conv_1))
-        '''
+            tmp = x_w.view(-1, self.num_features, self.conv_input, x_w.shape[-3], x_w.shape[-2], x_w.shape[-1])
+            conv_outs = {'cnv-1': tmp}
+        for i in range(len(self.convs[0])):
+            pastkey = 'cnv{}'.format(i - 1)
+            curkey = 'cnv{}'.format(i)
+            if isinstance(self.convs[0][i], torch.nn.Conv2d) or isinstance(self.convs[0][i],torch.nn.Conv3d):
+                seqlen = conv_outs[pastkey].shape[0]
+                channels = self.convs[0][i].out_channels
+                new_depth = int((conv_outs[pastkey].shape[-3] - self.convs[0][i].kernel_size[0])/self.convs[0][i].stride[0])+1
+                new_cube = int((conv_outs[pastkey].shape[-1] - self.convs[0][i].kernel_size[-1]) / self.convs[0][i].stride[0])+1
+                conv_outs[curkey] = torch.zeros((seqlen, self.num_features, channels, new_depth, new_cube, new_cube), device=self.device)
+                for f in range(self.num_features):
+                    conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
+                conv_outs[curkey] = torch.relu(conv_outs[curkey])
+            elif isinstance(self.convs[0][i],torch.nn.Dropout):
+                conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey], device=self.device)
+                for f in range(self.num_features):
+                    conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
+            elif isinstance(self.convs[0][i], MHA):
+                seqlen = conv_outs[pastkey].shape[0]
+                batchsize = conv_outs[pastkey].shape[2]
+                features_out = self.convs[0][i].d_model
+                conv_outs[curkey] = torch.zeros((seqlen, self.num_features, batchsize, features_out), device=self.device)
+                for f in range(self.num_features):
+                    conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
+
 
         # Flatten the convolution layer output
-        x_conv_output = tmp.view(-1, self.conv_output * 9)
+        outkey = 'cnv{}'.format(len(conv_outs)-2)
+        x_conv_output = conv_outs[outkey].view(-1, self.fc1.in_features)
         x_fc_1 = F.relu(self.fc1(x_conv_output))
         # Computes the second fully connected layer (activation applied later)
         # Size changes from (1, 256) to (1, 64)
@@ -205,11 +229,12 @@ class CONV_RECURRENT(nn.Module):
         recurrence = str(self.rnn_type).split('\'')[1].split('.')[-1]
         recurrence = recurrence + '{}lay'.format(self.rnn_layers)
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
-        convs = 'CONV-'
+        if self.attntype == 'None':
+            convs = 'CONV{}-'.format(self.num_features)
         if self.attntype == 'after':
-            convs = convs + 'SAA-'
+            convs = 'SAA{}-'.format(self.num_features)
         elif self.attntype == 'replace':
-            convs = convs + 'SAR-'
+            convs = 'SAR{}-'.format(self.num_features)
         model_name = '{}{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(convs, recurrence, opt, self.loss_function,
                                                                                 self.epochs_trained,
                                                                                 self.batch_size, self.rnn_input,

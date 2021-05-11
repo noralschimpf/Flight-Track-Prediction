@@ -57,7 +57,7 @@ class MultiHeadedAttention(torch.nn.Module):
             warnings.warn('Dimensions Do Not Match: Attempting to flatten')
             X = X.view(X.size(0), X.size(1), -1)
         if len(X.size()) == 2:
-            warnings.warn('Dimensions Do Not Match: Expanding to batch_size = 1')
+            warnings.warn('Missing Batch Size: Expanding to batch_size = 1')
             X = X.view(X.size(0), 1, X.size(1))
         #X Expected: [batch, seq_len, dim_in]
         if not self.batch_first:
