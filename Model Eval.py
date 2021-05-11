@@ -40,10 +40,10 @@ def main():
                     pathlist[i] = pathlist[i].replace(pathlist[i][:pathlist[i].index('data')],os.path.abspath('.') + '/')
             '''
 
-            flight_data = CustomDataset(root_dir=root, abspath_fp=fp_test, abspath_ft=ft_test, abspath_wc=wc_test,
-                                        transform=ToTensor(), device='cpu')
-            test_flights = torch.utils.data.DataLoader(flight_data, collate_fn=pad_batch, batch_size=1, num_workers=0,
-                                                       pin_memory=True, shuffle=False, drop_last=True)
+    flight_data = CustomDataset(root_dir=root, abspath_fp=fp_test, abspath_ft=ft_test, list_abspath_wc=wc_test,
+                                transform=ToTensor(), device='cpu')
+    test_flights = torch.utils.data.DataLoader(flight_data, collate_fn=pad_batch, batch_size=1, num_workers=0,
+                                               pin_memory=True, shuffle=False, drop_last=True)
 
             # begin validation
             mdlname = mdl.model_name()
