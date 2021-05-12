@@ -29,7 +29,7 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 1
+    epochs =20
     bs = 2
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     folds = 4
@@ -43,93 +43,102 @@ def main():
 
 
     # Uncomment block if generating valid file & split files
-    products=['ECHO_TOP','VIL','uwind','vwind','tmp']
-    cube_height = 3 if 'uwind' in products or 'vwind' in products or 'tmp' in products else 1
-    fps, fts, wcs, dates, _ = ValidFiles(root_dir, products, under_min=100)
+    total_products=['ECHO_TOP','VIL','uwind','vwind','tmp']
+    list_products=[['ECHO_TOP'],['VIL'],['ECHO_TOP','VIL']]
+
+    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=100)
     total_flights = len(fps)
 
-    for fold in range(folds):
-        # Random split
-        #train_flights = np.random.choice(total_flights, int(total_flights * .75), replace=False)
-        #test_flights = list(set(range(len(fps))) - set(train_flights))
+    for products in list_products:
+        cube_height = 3 if 'uwind' in products or 'vwind' in products or 'tmp' in products else 1
+        prdstr = '&'.join(products)
+        for fold in range(folds):
+            # Random split
+            #train_flights = np.random.choice(total_flights, int(total_flights * .75), replace=False)
+            #test_flights = list(set(range(len(fps))) - set(train_flights))
 
-        #cross-validation split
-        foldstr = 'fold{}-{}'.format(fold+1,folds)
-        test_flights = list(range( int(fold*total_flights/folds), int(((fold+1)*total_flights)/folds) ))
-        train_flights = list(set(range(total_flights)) - set(test_flights))
-        print('fold {}/{}\t{}-{} test flights'.format(fold+1,folds,min(test_flights),max(test_flights)))
-        train_flights.sort()
-        test_flights.sort()
+            #cross-validation split
+            foldstr = 'fold{}-{}'.format(fold+1,folds)
+            test_flights = list(range( int(fold*total_flights/folds), int(((fold+1)*total_flights)/folds) ))
+            train_flights = list(set(range(total_flights)) - set(test_flights))
+            print('fold {}/{}\t{}-{} test flights'.format(fold+1,folds,min(test_flights),max(test_flights)))
+            train_flights.sort()
+            test_flights.sort()
 
-        fps_train, fps_test = SplitStrList(fps, test_flights)
-        fts_train, fts_test = SplitStrList(fts, test_flights)
-        wcs_train, wcs_test = SplitStrList(wcs, test_flights)
+            fps_train, fps_test = SplitStrList(fps, test_flights)
+            fts_train, fts_test = SplitStrList(fts, test_flights)
+            wcs_train, wcs_test = SplitStrList(wcs, test_flights)
 
-        df_trainfiles = pd.DataFrame(
-            data={'flight plans': fps_train, 'flight tracks': fts_train, 'weather cubes': wcs_train})
-        df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
-        df_trainfiles.to_csv('train_flight_samples.txt'.format(foldstr))
-        df_testfiles.to_csv('test_flight_samples.txt'.format(foldstr))
+            df_trainfiles = pd.DataFrame(
+                data={'flight plans': fps_train, 'flight tracks': fts_train, 'weather cubes': wcs_train})
+            df_testfiles = pd.DataFrame(data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
+            df_trainfiles.to_csv('train_flight_samples.txt'.format(foldstr))
+            df_testfiles.to_csv('test_flight_samples.txt'.format(foldstr))
 
 
-        '''
-        # Uncomment block if validated & split files already exist
-        df_trainfiles = pd.read_csv('train_flight_samples.txt')
-        print('Loading Train Files')
-        fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
-        fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
-        wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
-        #TODO: eliminate train_flights    
-        '''
+            '''
+            # Uncomment block if validated & split files already exist
+            df_trainfiles = pd.read_csv('train_flight_samples.txt')
+            print('Loading Train Files')
+            fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
+            fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
+            wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
+            #TODO: eliminate train_flights    
+            '''
 
-        train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, products, ToTensor(), device='cpu')
-        train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=0, pin_memory=True,
-                              shuffle=False, drop_last=True)
+            train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, products, ToTensor(), device='cpu')
+            train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=0, pin_memory=True,
+                                  shuffle=False, drop_last=True)
 
-        test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, products, ToTensor(), device='cpu')
-        test_dl = DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
-                              shuffle=False, drop_last=True)
+            test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, products, ToTensor(), device='cpu')
+            test_dl = DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
+                                  shuffle=False, drop_last=True)
 
-        # train_model
-        for recur in [torch.nn.LSTM, torch.nn.GRU, indrnn]:
-        #for recur in [torch.nn.LSTM]:
-            for rnn_lay in [1,2]:
-            #for rnn_lay in [2]:
-                for att in ['None','after', 'replace']:
-                #for att in ['replace']:
-                    rlay = rnn_lay
-                    if recur == indrnn or recur == cuda_indrnn: rlay += 1
-                    mdl = CONV_RECURRENT(paradigm=paradigms[1], cube_height=cube_height, device=dev, rnn=recur, num_features=len(products),
-                                         rnn_layers=rlay, attn=att, batch_size=bs, droprate=.5)
-                    mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=2e-4)
-                    print(mdl)
-                    sttime = datetime.now()
-                    #print('START FIT: {}'.format(sttime))
-                    fit(mdl, train_dl, test_dl, epochs, train_flights)
-                    mdl.epochs_trained = epochs
-                    mdl.save_model(override=True)
-                    shutil.rmtree('Models/{}'.format(mdl.model_name().replace('EPOCHS{}'.format(epochs),'EPOCHS0')))
-                    #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
-                    fold_subdir = os.path.join('Models',mdl.model_name(), foldstr)
-                    if not os.path.isdir(fold_subdir):
-                        os.mkdir(fold_subdir)
-                    for fname in os.listdir('Models/{}'.format(mdl.model_name())):
-                        if os.path.isfile(os.path.join('Models',mdl.model_name(), fname)):
-                            shutil.move(os.path.join('Models',mdl.model_name(), fname), os.path.join('Models',mdl.model_name(),foldstr, fname))
+            # train_model
+            #for recur in [torch.nn.LSTM, torch.nn.GRU, indrnn]:
+            for recur in [torch.nn.LSTM]:
+                #for rnn_lay in [1,2]:
+                for rnn_lay in [1]:
+                    #for att in ['None','after', 'replace']:
+                    for att in ['None']:
+                        rlay = rnn_lay
+                        if recur == indrnn or recur == cuda_indrnn: rlay += 1
+                        mdl = CONV_RECURRENT(paradigm=paradigms[1], cube_height=cube_height, device=dev, rnn=recur, num_features=len(products),
+                                             rnn_layers=rlay, attn=att, batch_size=bs, droprate=.5)
+                        mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=2e-4)
+                        print(mdl)
+                        sttime = datetime.now()
+                        #print('START FIT: {}'.format(sttime))
+                        fit(mdl, train_dl, test_dl, epochs, train_flights)
+                        mdl.epochs_trained = epochs
+                        mdl.save_model(override=True)
+                        shutil.rmtree('Models/{}'.format(mdl.model_name().replace('EPOCHS{}'.format(epochs),'EPOCHS0')))
+                        #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
+                        fold_subdir = os.path.join('Models',mdl.model_name(), foldstr)
+                        if not os.path.isdir(fold_subdir):
+                            os.mkdir(fold_subdir)
+                        for fname in os.listdir('Models/{}'.format(mdl.model_name())):
+                            if os.path.isfile(os.path.join('Models',mdl.model_name(), fname)):
+                                shutil.move(os.path.join('Models',mdl.model_name(), fname), os.path.join('Models',mdl.model_name(),foldstr, fname))
 
-                    #shutil.move('Models/{}'.format(mdl.model_name()), 'Models/{}/{}'.format(mdl.model_name(), foldstr))
-                    edtime = datetime.now()
-                    #print('DONE: {}'.format(edtime - sttime))
+                        #shutil.move('Models/{}'.format(mdl.model_name()), 'Models/{}/{}'.format(mdl.model_name(), foldstr))
+                        edtime = datetime.now()
+                        #print('DONE: {}'.format(edtime - sttime))
 
-                    if not os.path.isdir('Initialized Plots/{}/{}'.format(mdl.model_name(), foldstr)):
-                        os.makedirs('Initialized Plots/{}/{}'.format(mdl.model_name(),foldstr))
-                    plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
-                    for plot in plots_to_move:
-                        shutil.move('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}'.format(mdl.model_name(), foldstr, plot))
+                        if not os.path.isdir('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
+                            os.makedirs('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
+                        if not os.path.isdir('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
+                            os.makedirs('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
 
-                    shutil.copy('test_flight_samples.txt', 'Models/{}/{}/test_flight_samples.txt'.format(mdl.model_name(), foldstr))
-                    shutil.copy('train_flight_samples.txt', 'Models/{}/{}/train_flight_samples.txt'.format(mdl.model_name(), foldstr))
-                    shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/model_epoch_losses.txt'.format(mdl.model_name(), foldstr))
+                        plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
+                        for plot in plots_to_move:
+                            shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
+                            shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
+                            os.remove('Initialized Plots/{}'.format(plot))
+
+                        shutil.copy('test_flight_samples.txt', 'Models/{}/{}/{}/test_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
+                        shutil.copy('train_flight_samples.txt', 'Models/{}/{}/{}/train_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
+                        shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr))
 
 
 def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default', ):
@@ -273,3 +282,6 @@ def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: tor
 
 if __name__ == '__main__':
     main()
+
+
+
