@@ -35,7 +35,7 @@ def main():
     folds = 4
 
     dev = 'cuda'
-    # dev = 'cpu'
+    #dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
@@ -115,7 +115,7 @@ def main():
                         os.mkdir(fold_subdir)
                     for fname in os.listdir('Models/{}'.format(mdl.model_name())):
                         if os.path.isfile(os.path.join('Models',mdl.model_name(), fname)):
-                            os.rename(os.path.join('Models',mdl.model_name(), fname), os.path.join('Models',mdl.model_name(),foldstr, fname))
+                            shutil.move(os.path.join('Models',mdl.model_name(), fname), os.path.join('Models',mdl.model_name(),foldstr, fname))
 
                     #shutil.move('Models/{}'.format(mdl.model_name()), 'Models/{}/{}'.format(mdl.model_name(), foldstr))
                     edtime = datetime.now()
