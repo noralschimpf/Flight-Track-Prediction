@@ -51,7 +51,7 @@ class CONV_RECURRENT(nn.Module):
             elif self.attntype == 'after':
                 extractor.append(torch.nn.Conv3d(self.conv_input, self.conv_hidden, kernel_size=(self.cube_height, 6, 6), stride=2))
                 extractor.append(torch.nn.Conv3d(self.conv_hidden, self.conv_output, kernel_size=(1,3,3), stride=2))
-                extractor.append(torch.nn.Flatten(1,-1))
+                extractor.append(torch.nn.Flatten(1))
                 extractor.append(torch.nn.Dropout(self.droprate))
                 extractor.append(MHA(d_model=self.conv_output*9, num_heads=3, p=0, d_input=36))
 
@@ -153,9 +153,19 @@ class CONV_RECURRENT(nn.Module):
                 conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey], device=self.device)
                 for f in range(self.num_features):
                     conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
+            elif isinstance(self.convs[0][i], torch.nn.Flatten):
+                conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey])
+                conv_outs[curkey] = conv_outs[curkey].reshape((conv_outs[curkey].shape[0], conv_outs[curkey].shape[1],
+                                                               -1))
+                for f in range(self.num_features):
+                    conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
             elif isinstance(self.convs[0][i], MHA):
+                #Expects shape [seqlen, num_weather_features, batch, sizes,sizes....]
                 seqlen = conv_outs[pastkey].shape[0]
-                batchsize = conv_outs[pastkey].shape[2]
+                if len(conv_outs[pastkey].shape) > 3:
+                    batchsize = conv_outs[pastkey].shape[2]
+                else:
+                    batchsize = 1
                 features_out = self.convs[0][i].d_model
                 conv_outs[curkey] = torch.zeros((seqlen, self.num_features, batchsize, features_out), device=self.device)
                 for f in range(self.num_features):
