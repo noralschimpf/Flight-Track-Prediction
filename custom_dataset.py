@@ -152,8 +152,12 @@ def pad_batch(batch):
     wc = [x for item in batch for x in item[2]]
 
     #expand CIWS wc's to fit cube shapes
-    #TODO: Vary wc stacking / height (NOT FIXED AT 3)
-    wc = [x if x.shape[2]==3 else torch.cat((torch.zeros_like(x),x,torch.zeros_like(x)),2) for x in wc]
+    # Fit to Cube height WARNING HEIGH MUST BE ODD
+    heights = [x.shape[2] for x in wc]
+    maxcenter = (max(heights)-1)/2
+    if not max(heights) == min(heights):
+        wc = [x if x.shape[2]== max(heights) else torch.cat((torch.repeat_interleave(torch.zeros_like(x), maxcenter, dim=2),
+                         x,torch.repeat_interleave(torch.zeros_like(x),maxcenter,dim=2)), 2) for x in wc]
     lookahead = wc[0].shape[-4]
     cube_height = wc[0].shape[-3]
     cube_width = wc[0].shape[-2]
