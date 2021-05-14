@@ -29,23 +29,32 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs =20
-    bs = 2
+    epochs = 500
+    bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     folds = 4
 
-    dev = 'cuda'
+    dev = 'cuda:1'
     #dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 
 
+    ## MODEL PARAMETERS
+    #atts = ['None','after', 'replace']
+    atts = ['None']
+    #recur_types = [torch.nn.LSTM, torch.nn.GRU, indrnn]
+    recur_types = [torch.nn.LSTM]
+    rnn_lays = [1]
+    drop = 0.0
+
+
 
     # Uncomment block if generating valid file & split files
     total_products=['ECHO_TOP','VIL','uwind','vwind','tmp']
-    list_products=[['ECHO_TOP'],['VIL'],['ECHO_TOP','VIL']]
-
+    list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
+    #list_products = [['ECHO_TOP']]
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=100)
     total_flights = len(fps)
 
@@ -95,16 +104,13 @@ def main():
                                   shuffle=False, drop_last=True)
 
             # train_model
-            #for recur in [torch.nn.LSTM, torch.nn.GRU, indrnn]:
-            for recur in [torch.nn.LSTM]:
-                #for rnn_lay in [1,2]:
-                for rnn_lay in [1]:
-                    #for att in ['None','after', 'replace']:
-                    for att in ['None']:
+            for recur in recur_types:
+                for rnn_lay in rnn_lays:
+                    for att in atts:
                         rlay = rnn_lay
                         if recur == indrnn or recur == cuda_indrnn: rlay += 1
                         mdl = CONV_RECURRENT(paradigm=paradigms[1], cube_height=cube_height, device=dev, rnn=recur, num_features=len(products),
-                                             rnn_layers=rlay, attn=att, batch_size=bs, droprate=.5)
+                                             rnn_layers=rlay, attn=att, batch_size=bs, droprate=drop)
                         mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=2e-4)
                         print(mdl)
                         sttime = datetime.now()
@@ -282,6 +288,3 @@ def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: tor
 
 if __name__ == '__main__':
     main()
-
-
-
