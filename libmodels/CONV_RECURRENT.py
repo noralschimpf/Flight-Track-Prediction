@@ -240,11 +240,11 @@ class CONV_RECURRENT(nn.Module):
         recurrence = recurrence + '{}lay'.format(self.rnn_layers)
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
         if self.attntype == 'None':
-            convs = 'CONV{}-'.format(self.num_features)
+            convs = 'CONV{}.{}-'.format(self.num_features, self.droprate)
         if self.attntype == 'after':
-            convs = 'SAA{}-'.format(self.num_features)
+            convs = 'SAA{}.{}-'.format(self.num_features, self.droprate)
         elif self.attntype == 'replace':
-            convs = 'SAR{}-'.format(self.num_features)
+            convs = 'SAR{}.{}-'.format(self.num_features, self.droprate)
         model_name = '{}{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(convs, recurrence, opt, self.loss_function,
                                                                                 self.epochs_trained,
                                                                                 self.batch_size, self.rnn_input,
