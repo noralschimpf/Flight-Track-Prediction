@@ -13,6 +13,7 @@ from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent a
 #from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from torch.utils.data import DataLoader
+from fit import fit
 
 
 '''TRAINING CONFIGS
@@ -29,12 +30,12 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 500
+    epochs = 1
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     folds = 4
 
-    dev = 'cuda:1'
+    dev = 'cuda'
     #dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/'  # TEST DATA
@@ -96,27 +97,30 @@ def main():
             '''
 
             train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, products, ToTensor(), device='cpu')
-            train_dl = DataLoader(train_dataset, collate_fn=pad_batch, batch_size=bs, num_workers=0, pin_memory=True,
-                                  shuffle=False, drop_last=True)
-
             test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, products, ToTensor(), device='cpu')
-            test_dl = DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
-                                  shuffle=False, drop_last=True)
 
             # train_model
             for recur in recur_types:
                 for rnn_lay in rnn_lays:
                     for att in atts:
+                        config = {
+                            # Pre-defined net params
+                            'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': recur,
+                            'features': products, 'attn': att, 'batch_size': bs,
+                            # Params to tune
+                            'ConvCh': [1, 2, 4], 'HLDepth': 1,
+                            'HLs': [16],
+                            'RNNIn': 6, 'RNNDepth': rnn_lay,
+                            'RNNHidden': 100,
+                            'droprate': drop, 'lr': 2e-4,
+                            'epochs': epochs,
+                            'optim': torch.optim.Adam,
+                        }
                         rlay = rnn_lay
                         if recur == indrnn or recur == cuda_indrnn: rlay += 1
-                        mdl = CONV_RECURRENT(paradigm=paradigms[1], cube_height=cube_height, device=dev, rnn=recur, features=products,
-                                             rnn_layers=rlay, attn=att, batch_size=bs, droprate=drop)
-                        mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=2e-4)
-                        print(mdl)
-                        sttime = datetime.now()
                         #print('START FIT: {}'.format(sttime))
-                        fit(mdl, train_dl, test_dl, epochs, train_flights)
-                        mdl.epochs_trained = epochs
+                        mdl = fit(config, train_dataset, test_dataset, raytune=False)
+                        mdl.epochs_trained = config['epochs']
                         mdl.save_model(override=True)
                         shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(epochs), 'EPOCHS0')))
                         #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
@@ -148,7 +152,7 @@ def main():
                         shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr))
 
 
-def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default', ):
+'''def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default', ):
     epoch_losses = torch.zeros(epochs, device=mdl.device)
     epoch_test_losses = torch.zeros(epochs, device=mdl.device)
     for ep in tqdm.trange(epochs, desc='{} epoch'.format(mdl.model_name().replace('-OPTAdam','').replace('LOSS','')), position=0, leave=False):
@@ -284,7 +288,7 @@ def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: tor
     plt.close()
 
     df_eloss = pd.DataFrame({'loss': e_losses})
-    df_eloss.to_csv('model_epoch_losses.txt')
+    df_eloss.to_csv('model_epoch_losses.txt')'''
 
 
 if __name__ == '__main__':
