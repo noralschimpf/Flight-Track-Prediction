@@ -109,7 +109,7 @@ def main():
                     for att in atts:
                         rlay = rnn_lay
                         if recur == indrnn or recur == cuda_indrnn: rlay += 1
-                        mdl = CONV_RECURRENT(paradigm=paradigms[1], cube_height=cube_height, device=dev, rnn=recur, num_features=len(products),
+                        mdl = CONV_RECURRENT(paradigm=paradigms[1], cube_height=cube_height, device=dev, rnn=recur, features=products,
                                              rnn_layers=rlay, attn=att, batch_size=bs, droprate=drop)
                         mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=2e-4)
                         print(mdl)
@@ -118,14 +118,15 @@ def main():
                         fit(mdl, train_dl, test_dl, epochs, train_flights)
                         mdl.epochs_trained = epochs
                         mdl.save_model(override=True)
-                        shutil.rmtree('Models/{}'.format(mdl.model_name().replace('EPOCHS{}'.format(epochs),'EPOCHS0')))
+                        shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(epochs), 'EPOCHS0')))
                         #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
-                        fold_subdir = os.path.join('Models',mdl.model_name(), foldstr)
+                        fold_subdir = os.path.join('Models',prdstr, mdl.model_name(), foldstr)
                         if not os.path.isdir(fold_subdir):
                             os.mkdir(fold_subdir)
-                        for fname in os.listdir('Models/{}'.format(mdl.model_name())):
-                            if os.path.isfile(os.path.join('Models',mdl.model_name(), fname)):
-                                shutil.move(os.path.join('Models',mdl.model_name(), fname), os.path.join('Models',mdl.model_name(),foldstr, fname))
+                        for fname in os.listdir('Models/{}/{}'.format(prdstr,mdl.model_name())):
+                            if os.path.isfile(os.path.join('Models',prdstr,mdl.model_name(), fname)):
+                                shutil.move(os.path.join('Models',prdstr,mdl.model_name(), fname),
+                                            os.path.join('Models',prdstr, mdl.model_name(),foldstr, fname))
 
                         #shutil.move('Models/{}'.format(mdl.model_name()), 'Models/{}/{}'.format(mdl.model_name(), foldstr))
                         edtime = datetime.now()
