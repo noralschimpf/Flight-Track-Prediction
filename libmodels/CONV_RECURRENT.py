@@ -14,7 +14,7 @@ import os
 class CONV_RECURRENT(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
                  dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
-                 attn='None', batch_size=1, droprate = .2, num_features: int = 1,
+                 attn='None', batch_size=1, droprate = .2, features: int = 1,
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
         # convolution layer for weather feature extraction prior to the RNN
@@ -23,7 +23,7 @@ class CONV_RECURRENT(nn.Module):
         self.attntype = attn
         self.batch_size = batch_size
         self.droprate = droprate
-        self.num_features = num_features
+        self.features = features
         self.cube_height = cube_height
 
         self.conv_input = conv_input
@@ -40,7 +40,7 @@ class CONV_RECURRENT(nn.Module):
 
 
         self.convs = nn.ModuleList()
-        for i in range(self.num_features):
+        for i in range(len(self.features)):
             extractor = nn.ModuleList()
             if self.attntype == 'replace':
                 extractor.append(MHA(d_model=128, num_heads=2, p=0, d_input=self.conv_input * self.cube_height * 400))
@@ -63,11 +63,11 @@ class CONV_RECURRENT(nn.Module):
             self.convs.append(extractor)
 
         if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
-            self.fc1 = torch.nn.Linear(self.num_features * self.conv_output*9, self.dense_hidden)
+            self.fc1 = torch.nn.Linear(len(self.features) * self.conv_output*9, self.dense_hidden)
             self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_hidden-3)
         elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
             # 64 input features, 16 output features (see sizing flow below)
-            self.fc1 = torch.nn.Linear(self.num_features * self.conv_output * 9, self.dense_hidden)
+            self.fc1 = torch.nn.Linear(len(self.features) * self.conv_output * 9, self.dense_hidden)
             # 16 input features, 4 output features (see sizing flow below)
             self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_input-3)
 
@@ -120,7 +120,7 @@ class CONV_RECURRENT(nn.Module):
                             'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
                             'conv_output': self.conv_output, 'attntype': self.attntype,
-                            'dense_hidden': self.dense_hidden, 'num_features': self.num_features,
+                            'dense_hidden': self.dense_hidden, 'features': self.features,
                             'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
                             'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
                             'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
@@ -133,9 +133,9 @@ class CONV_RECURRENT(nn.Module):
         # x_t is weather data (time ahead of flight)
         #TODO: VALIDATE FORWARD PASS FOR ALL MODEL TYPES
         if isinstance(self.convs[0][0], MHA):
-            conv_outs = {'cnv-1':x_w.view(x_w.shape[0], self.num_features, -1, self.cube_height*400)}
+            conv_outs = {'cnv-1':x_w.view(x_w.shape[0], len(self.features), -1, self.cube_height*400)}
         else:
-            tmp = x_w.view(-1, self.num_features, self.conv_input, x_w.shape[-3], x_w.shape[-2], x_w.shape[-1])
+            tmp = x_w.view(-1, len(self.features), self.conv_input, x_w.shape[-3], x_w.shape[-2], x_w.shape[-1])
             conv_outs = {'cnv-1': tmp}
         for i in range(len(self.convs[0])):
             pastkey = 'cnv{}'.format(i - 1)
@@ -145,19 +145,19 @@ class CONV_RECURRENT(nn.Module):
                 channels = self.convs[0][i].out_channels
                 new_depth = int((conv_outs[pastkey].shape[-3] - self.convs[0][i].kernel_size[0])/self.convs[0][i].stride[0])+1
                 new_cube = int((conv_outs[pastkey].shape[-1] - self.convs[0][i].kernel_size[-1]) / self.convs[0][i].stride[0])+1
-                conv_outs[curkey] = torch.zeros((seqlen, self.num_features, channels, new_depth, new_cube, new_cube), device=self.device)
-                for f in range(self.num_features):
+                conv_outs[curkey] = torch.zeros((seqlen, len(self.features), channels, new_depth, new_cube, new_cube), device=self.device)
+                for f in range(len(self.features)):
                     conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
                 conv_outs[curkey] = torch.relu(conv_outs[curkey])
             elif isinstance(self.convs[0][i],torch.nn.Dropout):
                 conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey], device=self.device)
-                for f in range(self.num_features):
+                for f in range(len(self.features)):
                     conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
             elif isinstance(self.convs[0][i], torch.nn.Flatten):
                 conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey])
                 conv_outs[curkey] = conv_outs[curkey].reshape((conv_outs[curkey].shape[0], conv_outs[curkey].shape[1],
                                                                -1))
-                for f in range(self.num_features):
+                for f in range(len(self.features)):
                     conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
             elif isinstance(self.convs[0][i], MHA):
                 #Expects shape [seqlen, num_weather_features, batch, sizes,sizes....]
@@ -167,8 +167,8 @@ class CONV_RECURRENT(nn.Module):
                 else:
                     batchsize = 1
                 features_out = self.convs[0][i].d_model
-                conv_outs[curkey] = torch.zeros((seqlen, self.num_features, batchsize, features_out), device=self.device)
-                for f in range(self.num_features):
+                conv_outs[curkey] = torch.zeros((seqlen, len(self.features), batchsize, features_out), device=self.device)
+                for f in range(len(self.features)):
                     conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
 
 
@@ -221,7 +221,7 @@ class CONV_RECURRENT(nn.Module):
     def save_model(self, model_name: str = None, override: bool = False):
         if model_name == None:
             model_name = self.model_name()
-        model_path = 'Models/{}/{}'.format(model_name, model_name)
+        model_path = 'Models/{}/{}/{}'.format('&'.join(self.features),model_name, model_name)
         while os.path.isfile(model_path) and not override:
             choice = input("Model Exists:\n1: Replace\n2: New Model\n")
             if choice == '1':
@@ -229,8 +229,9 @@ class CONV_RECURRENT(nn.Module):
             elif choice == '2':
                 name = input("Enter model name\n")
                 model_path = 'Models/' + name
-        if not os.path.isdir('Models/{}'.format(model_name)):
-            os.mkdir('Models/{}'.format(model_name))
+        container = '/'.join(model_path.split('/')[:-1])
+        if not os.path.isdir(container):
+            os.mkdir(container)
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
                     'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained,
                     'batch_size': self.batch_size}, model_path)
@@ -240,11 +241,11 @@ class CONV_RECURRENT(nn.Module):
         recurrence = recurrence + '{}lay'.format(self.rnn_layers)
         opt = str(self.optimizer.__class__).split('\'')[1].split('.')[-1]
         if self.attntype == 'None':
-            convs = 'CONV{}.{}-'.format(self.num_features, self.droprate)
+            convs = 'CONV{}.{}-'.format(len(self.features), self.droprate)
         if self.attntype == 'after':
-            convs = 'SAA{}.{}-'.format(self.num_features, self.droprate)
+            convs = 'SAA{}.{}-'.format(len(self.features), self.droprate)
         elif self.attntype == 'replace':
-            convs = 'SAR{}.{}-'.format(self.num_features, self.droprate)
+            convs = 'SAR{}.{}-'.format(len(self.features), self.droprate)
         model_name = '{}{}-OPT{}-LOSS{}-EPOCHS{}-BATCH{}-RNN{}_{}_{}'.format(convs, recurrence, opt, self.loss_function,
                                                                                 self.epochs_trained,
                                                                                 self.batch_size, self.rnn_input,
