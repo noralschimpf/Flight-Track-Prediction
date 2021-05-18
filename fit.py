@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import os, shutil, gc, tqdm
+import os, shutil, gc, tqdm, json
 from custom_dataset import pad_batch
 from libmodels.CONV_RECURRENT import CONV_RECURRENT
 from libmodels.model import load_model
@@ -25,8 +25,11 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
     mdl.optimizer = config['optim'](mdl.parameters(), lr=config['lr'])
 
     if checkpoint_dir:
-        chkpt = os.path.join(checkpoint_dir,'checkpoint')
-        mdl = load_model(chkpt)
+        chkpt = os.path.join(checkpoint_dir, 'checkpoint')
+        with open(chkpt) as f:
+            state = json.loads(f.read())
+            start = state['step'] + 1
+        #mdl = load_model(chkpt)
 
     epoch_losses = torch.zeros(config['epochs'], device=mdl.device)
     epoch_test_losses = torch.zeros(config['epochs'], device=mdl.device)
@@ -115,7 +118,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         epoch_test_losses[ep] = test_losses.mean().view(-1)
         mdl.train()
 
-        if ep % 10 == 0:
+        if (not raytune) and ep % 10 == 0:
             if mdl.device.__contains__('cuda'):
                 losses = losses.cpu()
                 test_losses = test_losses.cpu()
@@ -130,14 +133,16 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             plt.close()
             del losses
             gc.collect()
-        if ep % 50 == 0:
+        if (not raytune) and ep % 50 == 0:
             mdl.save_model(override=True)
         if raytune:
             with tune.checkpoint_dir(step=ep) as checkpoint_dir:
                 path = os.path.join(checkpoint_dir, 'checkpoint')
-                torch.save({'struct_dict': mdl.struct_dict, 'state_dict': mdl.state_dict(),
-                        'opt_dict': mdl.optimizer.state_dict(), 'epochs_trained': mdl.epochs_trained,
-                        'batch_size': mdl.batch_size}, path)
+                with open(path,"w") as f:
+                    f.write(json.dumps({'step': ep}))
+                #torch.save({'struct_dict': mdl.struct_dict, 'state_dict': mdl.state_dict(),
+                #        'opt_dict': mdl.optimizer.state_dict(), 'epochs_trained': mdl.epochs_trained,
+                #        'batch_size': mdl.batch_size}, path)
                 tune.report(loss=epoch_test_losses[ep].cpu().numpy())
 
 
@@ -146,28 +151,27 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         epoch_test_losses = epoch_test_losses.cpu()
     e_losses = epoch_losses.detach().numpy()
     e_test_losses = epoch_test_losses.detach().numpy()
-
-    plt.plot(e_losses, label='train data')
-    plt.plot(e_test_losses, label='test data')
-    plt.legend()
-    plt.title('Avg Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Avg Loss (MSE)')
-    plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
-    plt.close()
-
-    plt.plot(e_losses[:], label='train data')
-    plt.plot(e_test_losses[:], label='test data')
-    plt.legend()
-    plt.title('Avg Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Avg Loss (MSE)')
-    plt.ylim([0, .01])
-    plt.yticks(np.linspace(0, .01, 11))
-    plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
-    plt.close()
-
-    df_eloss = pd.DataFrame({'loss': e_losses})
-    df_eloss.to_csv('model_epoch_losses.txt')
     if not raytune:
+        plt.plot(e_losses, label='train data')
+        plt.plot(e_test_losses, label='test data')
+        plt.legend()
+        plt.title('Avg Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Avg Loss (MSE)')
+        plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+        plt.close()
+
+        plt.plot(e_losses[:], label='train data')
+        plt.plot(e_test_losses[:], label='test data')
+        plt.legend()
+        plt.title('Avg Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Avg Loss (MSE)')
+        plt.ylim([0, .01])
+        plt.yticks(np.linspace(0, .01, 11))
+        plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
+        plt.close()
+
+        df_eloss = pd.DataFrame({'loss': e_losses})
+        df_eloss.to_csv('model_epoch_losses.txt')
         return mdl
