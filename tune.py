@@ -22,7 +22,7 @@ def main():
     # training params
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     attns = {0: 'None', 1: 'after', 2: 'replace'}
-    max_epochs = 50
+    max_epochs = 10
 
     dev = 'cuda'
     # dev = 'cpu'
@@ -46,7 +46,7 @@ def main():
         # Params to tune
         'ConvCh': [1, tune.randint(1, 25), tune.randint(1, 25)], 'HLDepth': tune.randint(1, 6),
         'HLs': tune.sample_from(lambda spec: np.random.random_integers(1, high=48, size=spec.config.HLDepth)),
-        'RNNIn': tune.randint(1, 21), 'RNNDepth': tune.randint(1, 11), 'RNNHidden': tune.randint(20, 2001),
+        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(1, 11), 'RNNHidden': tune.randint(20, 2001),
         'droprate': tune.uniform(0, 1), 'lr': tune.loguniform(2e-6, 2e-2), 'epochs': tune.randint(10,max_epochs+1),
         'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
@@ -94,16 +94,20 @@ def main():
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, list_products, ToTensor(), device='cpu')
     test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, list_products, ToTensor(), device='cpu')
 
+    chkdir = 'Models/Tuning/CNN-LSTM1lay'
+    if not os.path.isdir(chkdir):
+        os.makedirs(chkdir)
     # train_model
     scheduler = ASHAScheduler(max_t=max_epochs, grace_period=1, reduction_factor=2)
     result = tune.run(
         tune.with_parameters(fit, train_dataset=train_dataset, test_dataset=test_dataset,
-                             checkpoint_dir='Models/Tuning/CNN-LSTM1lay', raytune=True),
+                             raytune=True),
         resources_per_trial={"cpu": 1, "gpu": 1},
         config=config,
         metric="loss",
+        name=chkdir.split('/')[-1],
         mode="min",
-        num_samples=10,
+        num_samples=2,
         scheduler=scheduler,
     )
     df = result.results_df
