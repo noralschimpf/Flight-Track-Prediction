@@ -13,7 +13,7 @@ import os
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
-                 dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
+                 rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
                  attn='None', batch_size=1, droprate = .2, features: int = 1,
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
@@ -62,14 +62,14 @@ class CONV_RECURRENT(nn.Module):
                 extractor.append(torch.nn.Conv3d(self.conv_output, self.conv_output, kernel_size=(1,1,1), stride=1))
             self.convs.append(extractor)
 
+        self.fc = torch.nn.ModuleList()
+        self.fc.append(torch.nn.Linear(len(self.features)*self.conv_output*9, self.dense_hidden[0]))
+        for i in range(len(self.dense_hidden)-1):
+            self.fc.append(self.dense_hidden[i],self.dense_hidden[i+1])
         if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
-            self.fc1 = torch.nn.Linear(len(self.features) * self.conv_output*9, self.dense_hidden)
-            self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_hidden-3)
+            self.fc.append(torch.nn.Linear(self.dense_hidden[-1], self.rnn_hidden-3))
         elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
-            # 64 input features, 16 output features (see sizing flow below)
-            self.fc1 = torch.nn.Linear(len(self.features) * self.conv_output * 9, self.dense_hidden)
-            # 16 input features, 4 output features (see sizing flow below)
-            self.fc2 = torch.nn.Linear(self.dense_hidden, self.rnn_input-3)
+            self.fc.append(torch.nn.Linear(self.dense_hidden[-1], self.rnn_input-3))
 
         ################################################################
         # IndRNN model
@@ -174,16 +174,17 @@ class CONV_RECURRENT(nn.Module):
 
         # Flatten the convolution layer output
         outkey = 'cnv{}'.format(len(conv_outs)-2)
-        x_conv_output = conv_outs[outkey].view(-1, self.fc1.in_features)
-        x_fc_1 = F.relu(self.fc1(x_conv_output))
-        # Computes the second fully connected layer (activation applied later)
-        # Size changes from (1, 256) to (1, 64)
-        x_fc_2 = F.relu(self.fc2(x_fc_1))
+        fc_out = {'fc-1': conv_outs[outkey].view(-1,self.fc[0].in_features)}
+        for i in range(len(self.fc)):
+            pastkey = 'fc{}'.format(i-1)
+            curkey = 'fc{}'.format(i)
+            fc_out[curkey] = F.relu(self.fc[i](fc_out[pastkey]))
 
         #############################################################
         # input_seq = flight trajectory data + weather features
         # shape: [seq_len, batch_size, input_features]
-        rnn_input_seq = torch.cat((x_fc_2.view(x_t.size(0),x_t.size(1),-1), x_t,), -1)
+        fc_outkey = 'fc{}'.format(len(fc_out)-2)
+        rnn_input_seq = torch.cat((fc_out[fc_outkey].view(x_t.size(0),x_t.size(1),-1), x_t,), -1)
         rnnout = rnn_input_seq
         for i in range(len(self.rnns)):
             if isinstance(self.rnns[i], indrnn) or isinstance(self.rnns[i], cuda_indrnn):
@@ -231,7 +232,7 @@ class CONV_RECURRENT(nn.Module):
                 model_path = 'Models/' + name
         container = '/'.join(model_path.split('/')[:-1])
         if not os.path.isdir(container):
-            os.mkdir(container)
+            os.makedirs(container)
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
                     'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained,
                     'batch_size': self.batch_size}, model_path)
