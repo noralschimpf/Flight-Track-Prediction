@@ -65,7 +65,7 @@ class CONV_RECURRENT(nn.Module):
         self.fc = torch.nn.ModuleList()
         self.fc.append(torch.nn.Linear(len(self.features)*self.conv_output*9, self.dense_hidden[0]))
         for i in range(len(self.dense_hidden)-1):
-            self.fc.append(self.dense_hidden[i],self.dense_hidden[i+1])
+            self.fc.append(torch.nn.Linear(self.dense_hidden[i],self.dense_hidden[i+1]))
         if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
             self.fc.append(torch.nn.Linear(self.dense_hidden[-1], self.rnn_hidden-3))
         elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
