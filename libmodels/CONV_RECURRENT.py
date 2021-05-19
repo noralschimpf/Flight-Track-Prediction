@@ -13,7 +13,7 @@ import os
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
-                 dense_output=4, rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
+                 rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
                  attn='None', batch_size=1, droprate = .2, features: int = 1,
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
@@ -117,7 +117,7 @@ class CONV_RECURRENT(nn.Module):
         self.epochs_trained = eptrained
 
         self.struct_dict = {'class': str(type(self)).split('\'')[1],
-                            'device': self.device, 'paradigm': self.paradigm,
+                            'device': self.device, 'paradigm': self.paradigm, 'cube height': self.cube_height,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
                             'conv_output': self.conv_output, 'attntype': self.attntype,
                             'dense_hidden': self.dense_hidden, 'features': self.features,
