@@ -52,10 +52,14 @@ def inv_norm(path_csv: str, path_data: str):
         df_data_denormed.to_csv('{}/Denormed/{}'.format(path_data,file))
 
 def main():
-    folders_to_denorm = [x for x in os.listdir('../Output') if os.path.isdir('../Output/{}'.format(x)) and 'EPOCHS' in x]
+    valid_products = ['ECHO_TOP', 'VIL', 'tmp', 'uwind', 'vwind']
+    mdl_product_dirs = [os.path.join(os.path.abspath('../'), 'Output/{}'.format(x)) for x in os.listdir('../Output') if
+                        os.path.isdir('../Output/{}'.format(x)) and any([y in x for y in valid_products])]
+    folders_to_denorm = [os.path.join(x, y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS' in y]
+    #folders_to_denorm = [x for x in os.listdir('../Output') if os.path.isdir('../Output/{}'.format(x)) and 'EPOCHS' in x]
     for folder in folders_to_denorm:
         print(folder)
-        inv_norm('Data_MinMax.csv','../Output/{}'.format(folder))
+        inv_norm('Data_MinMax.csv',folder)
 
 if __name__ == '__main__':
     main()
