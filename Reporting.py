@@ -1,6 +1,7 @@
 import os
 if os.name == 'posix':
-    os.environ['PROJ_LIB'] = "/home/lab/anaconda3/pkgs/proj-7.2.0-he47e99f_1/share/proj/"
+    #os.environ['PROJ_LIB'] = "/home/lab/anaconda3/pkgs/proj-7.2.0-he47e99f_1/share/proj/"
+    os.environ['PROJ_LIB'] = "/home/dualboot/anaconda3/pkgs/proj4-5.2.0-he6710b0_1/share/proj"
 elif os.name == 'nt':
     # os.environ['PROJ_LIB'] = 'C:\\Users\\User\\anaconda3\\pkgs\\proj4-5.2.0-ha925a31_1\\Library\\share'
     os.environ['PROJ_LIB'] = 'C:\\Users\\natha\\anaconda3\\pkgs\\proj4-5.2.0-ha925a31_1\\Library\\share'
@@ -13,17 +14,22 @@ from mpl_toolkits import mplot3d
 import Utils.ErrorFn as fn
 
 # Plots: Trajectories v. Known, MSE of each Flight in Test Data
-
-mdls = [x for x  in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCH' in x]
+valid_products = ['ECHO_TOP','VIL','tmp','uwind','vwind']
+mdl_product_dirs = [os.path.join(os.path.abspath('.'), 'Models/{}'.format(x)) for x in os.listdir('Models') if
+                        os.path.isdir('Models/{}'.format(x)) and any([y in x for y in valid_products])]
+mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS500' in y]
+mdls = [x for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCH' in x]
 df_summary = pd.DataFrame()
-for mdl in mdls:
-    if not os.path.isdir('Output/{}/Figs'.format(mdl)):
-        os.mkdir('Output/{}/Figs'.format(mdl))
+for mdl in mdl_dirs:
+    print(mdl)
+    outdir = mdl.replace('Models','Output')
+    if not os.path.isdir('{}/Figs'.format(outdir)):
+        os.mkdir('{}/Figs'.format(outdir))
 
 
-    df_flight_losses = pd.read_csv('Models/{}/total flight losses.txt'.format(mdl))
-    evals = [x for x in os.listdir('Output/{}/Denormed'.format(mdl))
-               if os.path.isfile('Output/{}/Denormed/{}'.format(mdl, x))]
+    df_flight_losses = pd.read_csv('{}/total flight losses.txt'.format(mdl))
+    evals = [x for x in os.listdir('{}/Denormed'.format(outdir))
+               if os.path.isfile('{}/Denormed/{}'.format(outdir, x))]
 
     l2_preds_2d, l2_fps_2d = np.zeros(len(evals)), np.zeros(len(evals))
     l2_preds_3d, l2_fps_3d = np.zeros(len(evals)), np.zeros(len(evals))
@@ -37,7 +43,7 @@ for mdl in mdls:
         mse_loss = df_flight_losses[df_flight_losses['flight name'] == evals[e][5:]]['loss (MSE)'].values
         if len(mse_loss) > 0:
             # calculated L2norm and % improvement for denormed flight
-            df_flight = pd.read_csv('Output/{}/Denormed/{}'.format(mdl,evals[e]))
+            df_flight = pd.read_csv('{}/Denormed/{}'.format(outdir,evals[e]))
             nda_fp = df_flight[['flight plan LAT', 'flight plan LON', 'flight plan ALT']].values
             nda_pred = df_flight[['predicted LAT', 'predicted LON', 'predicted ALT']].values
             nda_act =  df_flight[['actual LAT', 'actual LON', 'actual ALT']].values
@@ -81,7 +87,7 @@ for mdl in mdls:
                 c = m.plot(nda_act[:,1], nda_act[:,0], latlon=True, color='red', alpha=.5, label='actual')
                 plt.legend()
                 plt.title("{}\nMSE: {:.4f}   Reduction: {:.3f}".format(evals[e][5:-4], mse_loss[0], reduction_2d * 100))
-                plt.savefig('Output/{}/Figs/2D {}.png'.format(mdl,evals[e]), dpi=300)
+                plt.savefig('{}/Figs/2D {}.png'.format(outdir,evals[e]), dpi=300)
                 plt.close()
 
                 fig = plt.figure(); ax = plt.axes(projection='3d')
@@ -95,7 +101,7 @@ for mdl in mdls:
                 ax.set_zlabel('altitude (ft)')
                 plt.legend(); plt.title("{}\nMSE: {:.4f}   Reduction: {:.3f}".format(evals[e][5:-4], mse_loss[0], reduction_3d * 100))
                 fig.tight_layout()
-                plt.savefig('Output/{}/Figs/3D {}.png'.format(mdl, evals[e]), dpi=300)
+                plt.savefig('{}/Figs/3D {}.png'.format(outdir, evals[e]), dpi=300)
                 plt.close(); fig.clf(); ax.cla();
 
 
@@ -107,14 +113,13 @@ for mdl in mdls:
     phe_nmi_preds = np.array(phe_nmi_preds)
     pve_fps = np.array(pve_fps); pve_preds = np.array(pve_preds);
 
-
     # plot norm distributions (fp, pred) w/ % reduction in title
     reduction_2d = fn.reduction(l2_fps_2d[e], l2_preds_2d[e])
     plt.hist(l2_fps_2d, bins=50, alpha=.5, label='Flight Plans', density=True)
     plt.hist(l2_preds_2d, bins=50, alpha=.5, label='Predictions', density=True)
     plt.legend(); plt.xlabel('2D Norm (nmi.)');
     plt.title('L2 Norms (2D) Comparison\n{} Flights   Reduction: {:.3f} %'.format(len(l2_fps_2d),reduction_2d*100))
-    plt.savefig('Output/{}/Figs/L2 Norms 2D.png'.format(mdl), dpi=300)
+    plt.savefig('{}/Figs/L2 Norms 2D.png'.format(outdir), dpi=300)
     plt.close()
 
     reduction_3d = fn.reduction(l2_fps_3d[e], l2_preds_3d[e])
@@ -122,7 +127,7 @@ for mdl in mdls:
     plt.hist(l2_preds_3d, bins=50, alpha=.5, label='Predictions', density=True)
     plt.legend(); plt.xlabel('3D Norm (nmi)');
     plt.title('L2 Norms (3D) Comparison\n{} Flights   Reduction: {:.3f} %'.format(len(l2_fps_3d),reduction_3d * 100))
-    plt.savefig('Output/{}/Figs/L2 Norms 3D.png'.format(mdl), dpi=300)
+    plt.savefig('{}/Figs/L2 Norms 3D.png'.format(outdir), dpi=300)
     plt.close()
 
     # Plot PHE (nmi) distribution (MAPHE + stdev in title)
@@ -130,7 +135,7 @@ for mdl in mdls:
     plt.hist(phe_nmi_preds, bins=50, alpha=.5, label='Predictions', density=True)
     plt.legend(); plt.xlabel('Error (nmi)');
     plt.title('Pointwise Horizontal Errors\n{} Points'.format(len(phe_nmi_fps)))
-    plt.savefig('Output/{}/Figs/PHE Hist.png'.format(mdl), dpi=300)
+    plt.savefig('{}/Figs/PHE Hist.png'.format(outdir), dpi=300)
     plt.close()
 
 
@@ -139,7 +144,7 @@ for mdl in mdls:
     plt.hist(pve_preds, bins=50, alpha=.5, label='Predictions', density=True)
     plt.legend(); plt.xlabel('Error (ft)');
     plt.title('Pointwise Vertical Errors\n{} Points'.format(len(pve_fps)))
-    plt.savefig('Output/{}/Figs/PVE Hist.png'.format(mdl), dpi=300)
+    plt.savefig('{}/Figs/PVE Hist.png'.format(outdir), dpi=300)
     plt.close()
 
     # Plot THE (nmi) distribution (MATHE + stdev in title)
@@ -147,7 +152,7 @@ for mdl in mdls:
     plt.hist(the_nmi_preds, bins=50, alpha=.5, label='Predictions', density=True)
     plt.legend(); plt.xlabel('Error (nmi)');
     plt.title('Trajectorywise Horizontal Errors\n{} Flights'.format(len(the_nmi_fps)))
-    plt.savefig('Output/{}/Figs/THE Hist.png'.format(mdl), dpi=300)
+    plt.savefig('{}/Figs/THE Hist.png'.format(outdir), dpi=300)
     plt.close()
 
     # Plot TVE (m) distribution (MATVE + stdev in title)
@@ -155,7 +160,7 @@ for mdl in mdls:
     plt.hist(tve_preds, bins=50, alpha=.5, label='Predictions', density=True)
     plt.legend(); plt.xlabel('Error (ft)');
     plt.title('Trajectorywise Vertical Errors\n{} Flights'.format(len(tve_fps)))
-    plt.savefig('Output/{}/Figs/TVE Hist.png'.format(mdl), dpi=300)
+    plt.savefig('{}/Figs/TVE Hist.png'.format(outdir), dpi=300)
     plt.close()
 
     #Print MAPHE, MAPVE, MATHE, MATVE + stdev's
@@ -174,7 +179,7 @@ for mdl in mdls:
     print('PRED PW{:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(pred_maphe, pred_mapve, pred_stdphe, pred_stdpve))
     print('FP TW{:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(fp_mathe, fp_matve, fp_stdthe, fp_stdtve))
     print('PRED TW{:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(pred_mathe, pred_matve, pred_stdthe, pred_stdtve))
-    d = {'model': mdl,'fp_maphe': fp_maphe, 'fp_mapve': fp_mapve, 'fp_stdphe': fp_stdphe, 'fp_stdpve': fp_stdpve,
+    d = {'model': mdl.split('/')[-1], 'products': mdl.split('/')[-2], 'fp_maphe': fp_maphe, 'fp_mapve': fp_mapve, 'fp_stdphe': fp_stdphe, 'fp_stdpve': fp_stdpve,
          'pred_maphe': pred_maphe, 'pred_mapve': pred_mapve, 'pred_stdphe': pred_stdphe, 'pred_stdpve': pred_stdpve,
          'fp_mathe': fp_mathe, 'fp_matve': fp_matve, 'fp_stdthe': fp_stdthe, 'fp_stdtve': fp_stdtve,
          'pred_mathe': pred_mathe, 'pred_matve': pred_matve, 'pred_stdthe': pred_stdthe, 'pred_stdtve': pred_stdtve}

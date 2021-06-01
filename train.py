@@ -14,6 +14,8 @@ from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent a
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from torch.utils.data import DataLoader
 from fit import fit
+from ray import tune
+from Utils.Misc import str_to_list
 
 
 '''TRAINING CONFIGS
@@ -30,12 +32,12 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 1
+    epochs = 300
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     folds = 4
 
-    dev = 'cuda'
+    dev = 'cuda:1'
     #dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
     root_dir = 'data/'  # TEST DATA
@@ -54,10 +56,40 @@ def main():
 
     # Uncomment block if generating valid file & split files
     total_products=['ECHO_TOP','VIL','uwind','vwind','tmp']
-    list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
-    #list_products = [['ECHO_TOP']]
+    #list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
+    list_products = [['ECHO_TOP']]
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=100)
     total_flights = len(fps)
+
+    cnnlstm = tune.Analysis('~/ray_results/CNN_LSTM')
+    cnngru = tune.Analysis('~/ray_results/CNN_GRU')
+    cnnindrnn = tune.Analysis('~/ray_results/CNN_IndRNN')
+    saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
+    sarlstm = tune.Analysis('~/ray_results/SA_LSTM')
+    cfgs = [x.get_best_config(metric='valloss',mode='min') for x in [cnngru, cnnlstm, saalstm,sarlstm]]
+    cfg_lstm = cnnlstm.get_best_config(metric='valloss', mode='min')
+    # Correct Models
+    for config in cfgs:
+        config['epochs'] = epochs
+        config['device'] = dev
+        if isinstance(config['optim'], str):
+            if 'Adam' in config['optim']:
+                config['optim'] = torch.optim.Adam
+            elif 'RMS' in config['optim']:
+                config['optim'] = torch.optim.RMSprop
+            elif 'SGD' in config['optim']:
+                config['optim'] = torch.optim.SGD
+        if isinstance(config['rnn'], str):
+            if 'LSTM' in config['rnn']:
+                config['rnn'] = torch.nn.LSTM
+            elif 'GRU' in config['rnn']:
+                config['rnn'] = torch.nn.GRU
+            elif 'IndRNN' in config['rnn']:
+                config['rnn'] = indrnn
+        if isinstance(config['HLs'], str): config['HLs'] = str_to_list(config['HLs'], int)
+        if isinstance(config['ConvCh'], str): config['ConvCh'] = str_to_list(config['ConvCh'], int)
+        for key in config:
+            if 'RNN' in key: config[key] = cfg_lstm[key]
 
     for products in list_products:
         cube_height = 3 if 'uwind' in products or 'vwind' in products or 'tmp' in products else 1
@@ -100,56 +132,38 @@ def main():
             test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, products, ToTensor(), device='cpu')
 
             # train_model
-            for recur in recur_types:
-                for rnn_lay in rnn_lays:
-                    for att in atts:
-                        config = {
-                            # Pre-defined net params
-                            'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': recur,
-                            'features': products, 'attn': att, 'batch_size': bs,
-                            # Params to tune
-                            'ConvCh': [1, 2, 4], 'HLDepth': 1,
-                            'HLs': [16],
-                            'RNNIn': 6, 'RNNDepth': rnn_lay,
-                            'RNNHidden': 100,
-                            'droprate': drop, 'lr': 2e-4,
-                            'epochs': epochs,
-                            'optim': torch.optim.Adam,
-                        }
-                        rlay = rnn_lay
-                        if recur == indrnn or recur == cuda_indrnn: rlay += 1
-                        #print('START FIT: {}'.format(sttime))
-                        mdl = fit(config, train_dataset, test_dataset, raytune=False)
-                        mdl.epochs_trained = config['epochs']
-                        mdl.save_model(override=True)
-                        shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(epochs), 'EPOCHS0')))
-                        #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
-                        fold_subdir = os.path.join('Models',prdstr, mdl.model_name(), foldstr)
-                        if not os.path.isdir(fold_subdir):
-                            os.mkdir(fold_subdir)
-                        for fname in os.listdir('Models/{}/{}'.format(prdstr,mdl.model_name())):
-                            if os.path.isfile(os.path.join('Models',prdstr,mdl.model_name(), fname)):
-                                shutil.move(os.path.join('Models',prdstr,mdl.model_name(), fname),
-                                            os.path.join('Models',prdstr, mdl.model_name(),foldstr, fname))
+            for config in cfgs:
+                mdl = fit(config, train_dataset, test_dataset, raytune=False)
+                mdl.epochs_trained = config['epochs']
+                mdl.save_model(override=True)
+                shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))
+                #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
+                fold_subdir = os.path.join('Models',prdstr, mdl.model_name(), foldstr)
+                if not os.path.isdir(fold_subdir):
+                    os.makedirs(fold_subdir)
+                for fname in os.listdir('Models/{}/{}'.format(prdstr,mdl.model_name())):
+                    if os.path.isfile(os.path.join('Models',prdstr,mdl.model_name(), fname)):
+                        shutil.move(os.path.join('Models',prdstr,mdl.model_name(), fname),
+                                    os.path.join('Models',prdstr, mdl.model_name(),foldstr, fname))
 
-                        #shutil.move('Models/{}'.format(mdl.model_name()), 'Models/{}/{}'.format(mdl.model_name(), foldstr))
-                        edtime = datetime.now()
-                        #print('DONE: {}'.format(edtime - sttime))
+                #shutil.move('Models/{}'.format(mdl.model_name()), 'Models/{}/{}'.format(mdl.model_name(), foldstr))
+                edtime = datetime.now()
+                #print('DONE: {}'.format(edtime - sttime))
 
-                        if not os.path.isdir('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
-                            os.makedirs('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
-                        if not os.path.isdir('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
-                            os.makedirs('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
+                if not os.path.isdir('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
+                    os.makedirs('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
+                if not os.path.isdir('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
+                    os.makedirs('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
 
-                        plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
-                        for plot in plots_to_move:
-                            shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
-                            shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
-                            os.remove('Initialized Plots/{}'.format(plot))
+                plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
+                for plot in plots_to_move:
+                    shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
+                    shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
+                    os.remove('Initialized Plots/{}'.format(plot))
 
-                        shutil.copy('test_flight_samples.txt', 'Models/{}/{}/{}/test_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
-                        shutil.copy('train_flight_samples.txt', 'Models/{}/{}/{}/train_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
-                        shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr))
+                shutil.copy('test_flight_samples.txt', 'Models/{}/{}/{}/test_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
+                shutil.copy('train_flight_samples.txt', 'Models/{}/{}/{}/train_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
+                shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr))
 
 
 '''def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default', ):

@@ -52,7 +52,7 @@ class MultiHeadedAttention(torch.nn.Module):
     def group_heads(self, x, batch_size):
         return x.transpose(1,2).contiguous().view(batch_size, -1, self.num_heads *self.d_k)
 
-    def forward(self, X):
+    def forward(self, X: torch.tensor):
         if len(X.size()) > 3:
             warnings.warn('Dimensions Do Not Match: Attempting to flatten')
             X = X.view(X.size(0), X.size(1), -1)
