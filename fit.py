@@ -9,7 +9,7 @@ from libmodels.model import load_model
 from ray import tune
 
 def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
-        raytune: bool = False, model_name: str = 'Default', ):
+        raytune: bool = False, model_name: str = 'Default'):
     train_dl = torch.utils.data.DataLoader(train_dataset, collate_fn=pad_batch, batch_size=config['batch_size'], num_workers=0, pin_memory=True,
                           shuffle=False, drop_last=True)
     test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
@@ -29,15 +29,14 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         with open(chkpt) as f:
             state = json.loads(f.read())
             start = state['step'] + 1
-        #mdl = load_model(chkpt)
+        mdl = load_model(chkpt)
 
     epoch_losses = torch.zeros(config['epochs'], device=mdl.device)
     epoch_test_losses = torch.zeros(config['epochs'], device=mdl.device)
-    for ep in tqdm.trange(config['epochs'], desc='{} epoch'.format(mdl.model_name().replace('-OPTAdam','').replace('LOSS','')), position=0, leave=False):
+    for ep in (tqdm.trange(config['epochs'], desc='epoch', position=0, leave=False) if not raytune else range(config['epochs'])):
         losses = torch.zeros(len(train_dl), device=mdl.device)
 
-        for batch_idx, (fp, ft, wc) in enumerate(
-                tqdm.tqdm(train_dl, desc='flight', position=1, leave=False)):  # was len(flight_data)
+        for batch_idx, (fp, ft, wc) in enumerate((tqdm.tqdm(train_dl, desc='flight', position=1, leave=False) if not raytune else train_dl)):  # was len(flight_data)
             # Extract flight plan, flight track, and weather cubes
             if mdl.device.__contains__('cuda'):
                 fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
@@ -140,10 +139,15 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 path = os.path.join(checkpoint_dir, 'checkpoint')
                 with open(path,"w") as f:
                     f.write(json.dumps({'step': ep}))
-                #torch.save({'struct_dict': mdl.struct_dict, 'state_dict': mdl.state_dict(),
-                #        'opt_dict': mdl.optimizer.state_dict(), 'epochs_trained': mdl.epochs_trained,
-                #        'batch_size': mdl.batch_size}, path)
-                tune.report(loss=epoch_test_losses[ep].cpu().numpy())
+                mdl.epochs_trained = ep
+                if epoch_test_losses[ep] == epoch_test_losses[:ep+1].min():
+                    todel = [x for x in os.listdir('.') if mdl.model_name()[:mdl.model_name().index('EPOCHS')] in x]
+                    [os.remove(x) for x in todel]
+                    mdl.save_model(override=True, override_path='.')
+                    #torch.save({'struct_dict': mdl.struct_dict, 'state_dict': mdl.state_dict(),
+                    #        'opt_dict': mdl.optimizer.state_dict(), 'epochs_trained': mdl.epochs_trained,
+                    #        'batch_size': mdl.batch_size}, path)
+                tune.report(loss=epoch_losses[ep].cpu().numpy(), valloss=epoch_test_losses[ep].cpu().numpy())
 
 
     if mdl.device.__contains__('cuda'):
@@ -172,6 +176,6 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
         plt.close()
 
-        df_eloss = pd.DataFrame({'loss': e_losses})
+        df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
         df_eloss.to_csv('model_epoch_losses.txt')
         return mdl

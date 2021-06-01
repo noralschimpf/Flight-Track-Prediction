@@ -53,7 +53,7 @@ class CONV_RECURRENT(nn.Module):
                 extractor.append(torch.nn.Conv3d(self.conv_hidden, self.conv_output, kernel_size=(1,3,3), stride=2))
                 extractor.append(torch.nn.Flatten(1))
                 extractor.append(torch.nn.Dropout(self.droprate))
-                extractor.append(MHA(d_model=self.conv_output*9, num_heads=3, p=0, d_input=36))
+                extractor.append(MHA(d_input=self.conv_output*9, num_heads=3, p=0, d_model=self.conv_output*9))
 
             else:
                 extractor.append(torch.nn.Conv3d(self.conv_input, self.conv_hidden, kernel_size=(self.cube_height, 6, 6), stride=2))
@@ -219,18 +219,22 @@ class CONV_RECURRENT(nn.Module):
             self.hidden_cell = torch.cat((tns_coords.repeat(self.rnn_layers, 1, 1),))
 
 
-    def save_model(self, model_name: str = None, override: bool = False):
-        if model_name == None:
-            model_name = self.model_name()
-        model_path = 'Models/{}/{}/{}'.format('&'.join(self.features),model_name, model_name)
-        while os.path.isfile(model_path) and not override:
-            choice = input("Model Exists:\n1: Replace\n2: New Model\n")
-            if choice == '1':
-                break
-            elif choice == '2':
-                name = input("Enter model name\n")
-                model_path = 'Models/' + name
-        container = '/'.join(model_path.split('/')[:-1])
+    def save_model(self, override_path: str = None, override: bool = False):
+        model_name = self.model_name()
+        if override_path == None:
+            container = 'Models/{}/{}/'.format('&'.join(self.features),model_name)
+            model_path = '{}/{}'.format(container, model_name)
+            while os.path.isfile(model_path) and not override:
+                choice = input("Model Exists:\n1: Replace\n2: New Model\n")
+                if choice == '1':
+                    break
+                elif choice == '2':
+                    name = input("Enter model name\n")
+                    model_path = '{}/{}'.format(container,name)
+            container = '/'.join(model_path.split('/')[:-1])
+        else:
+            container = override_path
+            model_path = '{}/{}'.format(container, model_name)
         if not os.path.isdir(container):
             os.makedirs(container)
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
