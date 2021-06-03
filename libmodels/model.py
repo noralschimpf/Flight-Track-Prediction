@@ -7,7 +7,6 @@ def load_model(model_path: str):
     struct = dicts['struct_dict']
     state_dict = dicts['state_dict']
     opt_dict = dicts['opt_dict']
-    #TODO: cube_height=struct['cube height']
     hght = 3 if 'uwind' in struct['features'] or 'vwind' in struct['features'] or 'tmp' in struct['features'] else 1
     mdl = CONV_RECURRENT(paradigm=struct['paradigm'], device=struct['device'], cube_height=hght,
                          conv_input=struct['conv_input'], conv_hidden=struct['conv_hidden'], conv_output=struct['conv_output'],

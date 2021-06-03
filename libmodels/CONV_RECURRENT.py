@@ -131,7 +131,6 @@ class CONV_RECURRENT(nn.Module):
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
-        #TODO: VALIDATE FORWARD PASS FOR ALL MODEL TYPES
         if isinstance(self.convs[0][0], MHA):
             conv_outs = {'cnv-1':x_w.view(x_w.shape[0], len(self.features), -1, self.cube_height*400)}
         else:
@@ -231,7 +230,7 @@ class CONV_RECURRENT(nn.Module):
                 model_path = 'Models/' + name
         container = '/'.join(model_path.split('/')[:-1])
         if not os.path.isdir(container):
-            os.mkdir(container)
+            os.makedirs(container)
         torch.save({'struct_dict': self.struct_dict, 'state_dict': self.state_dict(),
                     'opt_dict': self.optimizer.state_dict(), 'epochs_trained': self.epochs_trained,
                     'batch_size': self.batch_size}, model_path)
