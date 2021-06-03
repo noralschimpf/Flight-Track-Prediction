@@ -32,7 +32,7 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 300
+    epochs = 1
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     folds = 4
@@ -66,12 +66,15 @@ def main():
     cnnindrnn = tune.Analysis('~/ray_results/CNN_IndRNN')
     saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
     sarlstm = tune.Analysis('~/ray_results/SA_LSTM')
-    cfgs = [x.get_best_config(metric='valloss',mode='min') for x in [cnngru, cnnlstm, saalstm,sarlstm]]
+    cfgs = [x.get_best_config(metric='valloss',mode='min') for x in [cnnlstm, saalstm, sarlstm]]
     cfg_lstm = cnnlstm.get_best_config(metric='valloss', mode='min')
     # Correct Models
     for config in cfgs:
         config['epochs'] = epochs
         config['device'] = dev
+        if not 'weight_reg' in config.keys():
+            config['weight_reg'] = 0.
+        config['batchnorm'] = 'simple'
         if isinstance(config['optim'], str):
             if 'Adam' in config['optim']:
                 config['optim'] = torch.optim.Adam
@@ -88,8 +91,8 @@ def main():
                 config['rnn'] = indrnn
         if isinstance(config['HLs'], str): config['HLs'] = str_to_list(config['HLs'], int)
         if isinstance(config['ConvCh'], str): config['ConvCh'] = str_to_list(config['ConvCh'], int)
-        for key in config:
-            if 'RNN' in key: config[key] = cfg_lstm[key]
+        #for key in config:
+        #    if 'RNN' in key: config[key] = cfg_lstm[key]
 
     for products in list_products:
         cube_height = 3 if 'uwind' in products or 'vwind' in products or 'tmp' in products else 1
