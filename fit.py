@@ -19,10 +19,10 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                          rnn=config['rnn'], features=config['features'], rnn_layers=config['RNNDepth'],
                          attn=config['attn'], batch_size=config['batch_size'],
                          conv_input=config['ConvCh'][0], conv_hidden=config['ConvCh'][1],
-                         conv_output=config['ConvCh'][2],
+                         conv_output=config['ConvCh'][2], batchnorm=config['batchnorm'],
                          dense_hidden=config['HLs'], rnn_input=config['RNNIn'], rnn_hidden=config['RNNHidden'],
                          rnn_output=3, droprate=config['droprate'])
-    mdl.optimizer = config['optim'](mdl.parameters(), lr=config['lr'])
+    mdl.optimizer = config['optim'](mdl.parameters(), lr=config['lr'], weight_decay=config['weight_reg'])
 
     if checkpoint_dir:
         chkpt = os.path.join(checkpoint_dir, 'checkpoint')

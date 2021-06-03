@@ -13,11 +13,21 @@ import os
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
     def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
-                 rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3,
+                 rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3, batchnorm='None',
                  attn='None', batch_size=1, droprate = .2, features: int = 1,
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
         # convolution layer for weather feature extraction prior to the RNN
+        self.bn_type = batchnorm
+        if batchnorm == 'None':
+            self.bn = False
+            self.bn_af = False
+        elif batchnorm == 'simple':
+            self.bn = True
+            self.bn_af = False
+        elif batchnorm == 'learn':
+            self.bn = True
+            self.bn_af = True
         self.device = device
         self.paradigm = paradigm
         self.attntype = attn
@@ -43,51 +53,64 @@ class CONV_RECURRENT(nn.Module):
         for i in range(len(self.features)):
             extractor = nn.ModuleList()
             if self.attntype == 'replace':
-                extractor.append(MHA(d_model=128, num_heads=2, p=0, d_input=self.conv_input * self.cube_height * 400))
-                extractor.append(MHA(d_model=36, num_heads=4, p=0, d_input=128))
+                extractor.append(MHA(d_model=64*self.conv_hidden, num_heads=self.conv_hidden, p=0, d_input=self.conv_input * self.cube_height * 400))
+                if self.bn: extractor.append(torch.nn.BatchNorm1d(64*self.conv_hidden, affine=self.bn_af))
+                extractor.append(MHA(d_model=9*self.conv_output, num_heads=self.conv_output, p=0, d_input=64*self.conv_hidden))
+                if self.bn: extractor.append(torch.nn.BatchNorm1d(9*self.conv_output, affine=self.bn_af))
                 extractor.append(torch.nn.Dropout(self.droprate))
-                extractor.append(MHA(d_model=self.conv_output*9,num_heads=3,p=0,d_input=36))
+                extractor.append(MHA(d_model=self.conv_output*9,num_heads=self.conv_output,p=0,d_input=9*self.conv_output))
+                if self.bn: extractor.append(torch.nn.BatchNorm1d(self.conv_output*9, affine=self.bn_af))
 
             elif self.attntype == 'after':
                 extractor.append(torch.nn.Conv3d(self.conv_input, self.conv_hidden, kernel_size=(self.cube_height, 6, 6), stride=2))
+                if self.bn: extractor.append(torch.nn.BatchNorm3d(self.conv_hidden, affine=self.bn_af))
                 extractor.append(torch.nn.Conv3d(self.conv_hidden, self.conv_output, kernel_size=(1,3,3), stride=2))
+                if self.bn: extractor.append(torch.nn.BatchNorm3d(self.conv_output, affine=self.bn_af))
                 extractor.append(torch.nn.Flatten(1))
                 extractor.append(torch.nn.Dropout(self.droprate))
                 extractor.append(MHA(d_input=self.conv_output*9, num_heads=3, p=0, d_model=self.conv_output*9))
+                if self.bn: extractor.append(torch.nn.BatchNorm1d(self.conv_output*9, affine=self.bn_af))
 
             else:
                 extractor.append(torch.nn.Conv3d(self.conv_input, self.conv_hidden, kernel_size=(self.cube_height, 6, 6), stride=2))
+                if self.bn: extractor.append(torch.nn.BatchNorm3d(self.conv_hidden, affine=self.bn_af))
                 extractor.append(torch.nn.Conv3d(self.conv_hidden, self.conv_output, kernel_size=(1,3,3), stride=2))
+                if self.bn: extractor.append(torch.nn.BatchNorm3d(self.conv_output, affine=self.bn_af))
                 extractor.append(torch.nn.Dropout(self.droprate))
                 extractor.append(torch.nn.Conv3d(self.conv_output, self.conv_output, kernel_size=(1,1,1), stride=1))
+                if self.bn: extractor.append(torch.nn.BatchNorm3d(self.conv_output, affine=self.bn_af))
             self.convs.append(extractor)
 
         self.fc = torch.nn.ModuleList()
         self.fc.append(torch.nn.Linear(len(self.features)*self.conv_output*9, self.dense_hidden[0]))
         for i in range(len(self.dense_hidden)-1):
             self.fc.append(torch.nn.Linear(self.dense_hidden[i],self.dense_hidden[i+1]))
+            if self.bn: self.fc.append(torch.nn.BatchNorm1d(self.dense_hidden[i+1], affine=self.bn_af))
         if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
             self.fc.append(torch.nn.Linear(self.dense_hidden[-1], self.rnn_hidden-3))
+            if self.bn: self.fc.append(torch.nn.BatchNorm1d(self.rnn_hidden-3, affine=self.bn_af))
         elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
             self.fc.append(torch.nn.Linear(self.dense_hidden[-1], self.rnn_input-3))
+            if self.bn: self.fc.append(torch.nn.BatchNorm1d(self.rnn_input - 3, affine=self.bn_af))
 
         ################################################################
         # IndRNN model
         self.rnns = nn.ModuleList()
 
         for i in range(self.rnn_layers):
-            if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn:
-                if i == 0:
-                    self.rnns.append(torch.nn.Dropout(self.droprate))
-                self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
-                self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
-                if not i == self.rnn_layers:
-                    self.rnns.append(torch.nn.Dropout(self.droprate))
+            if i == 0:
+                lstm_insize = self.rnn_input
+                self.rnns.append(torch.nn.Dropout(self.droprate))
+            else: lstm_insize = self.rnn_hidden
+
+            if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn: self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
             elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
-                if i == 0:
-                    self.rnns.append(torch.nn.Dropout(self.droprate))
-                    self.rnns.append(self.rnn_type(input_size=self.rnn_input, hidden_size=self.rnn_hidden,
-                                                   num_layers=self.rnn_layers, dropout=droprate))
+                self.rnns.append(self.rnn_type(input_size=lstm_insize, hidden_size=self.rnn_hidden))
+            #if self.bn: self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
+            if self.bn: self.rnns.append(torch.nn.BatchNorm1d(self.rnn_hidden, affine=self.bn_af))
+            if not i == self.rnn_layers:
+                self.rnns.append(torch.nn.Dropout(self.droprate))
+
             # gru/lstm(input_size, hidden_size, num_layers)
             # indrnn(hidden_size)
             # indrnns[i].indrnn_cell initialized on uniform distr. Set to coordinates in training
@@ -103,8 +126,12 @@ class CONV_RECURRENT(nn.Module):
             # h_ of size (num_lay, batch, hidden_size)
             self.hidden_cell = torch.zeros((self.rnn_layers*1, 1, self.rnn_hidden))
 
-
-        self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
+        if len(self.rnns) == 0 and (self.rnn_type == indrnn or self.rnn_type == cuda_indrnn):
+            self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
+        elif len(self.rnns) == 0 and (self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU):
+            self.linear = nn.Linear(self.rnn_input, self.rnn_output)
+        else:
+            self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
 
         if self.device.__contains__('cuda'):
             self.cuda(self.device)
@@ -124,7 +151,7 @@ class CONV_RECURRENT(nn.Module):
                             'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
                             'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
                             'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
-                            'loss_fn': self.loss_function, 'optim': type(self.optimizer)}
+                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
 
     def forward(self, x_w, x_t):
         # convolution apply first
@@ -149,10 +176,18 @@ class CONV_RECURRENT(nn.Module):
                 for f in range(len(self.features)):
                     conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
                 conv_outs[curkey] = torch.relu(conv_outs[curkey])
-            elif isinstance(self.convs[0][i],torch.nn.Dropout):
+            elif isinstance(self.convs[0][i],torch.nn.Dropout) or isinstance(self.convs[0][i], torch.nn.BatchNorm3d):
                 conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey], device=self.device)
                 for f in range(len(self.features)):
                     conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f])
+            if isinstance(self.convs[0][i], torch.nn.BatchNorm1d):
+                conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey], device=self.device)
+                if self.attntype == 'replace':
+                    for f in range(len(self.features)):
+                        conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:, f].permute(1,2,0)).permute(2,0,1)
+                else:
+                    for f in range(len(self.features)):
+                        conv_outs[curkey][:,f] = self.convs[f][i](conv_outs[pastkey][:,f].permute(1,2,0)).permute(2,0,1)
             elif isinstance(self.convs[0][i], torch.nn.Flatten):
                 conv_outs[curkey] = torch.zeros_like(conv_outs[pastkey])
                 conv_outs[curkey] = conv_outs[curkey].reshape((conv_outs[curkey].shape[0], conv_outs[curkey].shape[1],
@@ -194,6 +229,8 @@ class CONV_RECURRENT(nn.Module):
                 rnnout = self.rnns[i](rnnout, self.hidden_cell[rnnlay])
             elif isinstance(self.rnns[i], BatchNorm) or isinstance(self.rnns[i], torch.nn.Dropout):
                 rnnout = self.rnns[i](rnnout)
+            elif isinstance(self.rnns[i], torch.nn.BatchNorm1d):
+                rnnout = self.rnns[i](rnnout.permute(1,2,0)).permute(2,0,1)
             elif isinstance(self.rnns[i], torch.nn.LSTM) or isinstance(self.rnns[i], torch.nn.GRU):
                 rnnout, self.hidden_cell = self.rnns[i](rnnout)
 
