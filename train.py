@@ -52,9 +52,11 @@ def main():
 
 
     # Uncomment block if generating valid file & split files
-    total_products=['ECHO_TOP','VIL','uwind','vwind','tmp']
-    list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
-    #list_products = [['ECHO_TOP']]
+    total_products = ['ECHO_TOP', 'VIL', 'uwind', 'vwind', 'tmp']
+    list_products = [['ECHO_TOP'],['VIL'],['uwind'],['vwind'],['tmp'],
+                     ['ECHO_TOP', 'tmp'], ['VIL', 'tmp'], ['tmp', 'vwind'], ['vwind', 'uwind'],
+                     ['ECHO_TOP', 'VIL', 'tmp'], ['tmp', 'vwind', 'uwind']]
+
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=100)
     total_flights = len(fps)
 
