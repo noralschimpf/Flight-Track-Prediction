@@ -84,8 +84,8 @@ def main():
 
     ## MODEL PARAMETERS
     # Ray search space
-    ray.init(num_gpus=1)
-    global_optim = torch.optim.RMSprop
+    ray.init(num_gpus=2)
+    global_optim = torch.optim.Adam
     config_cnnlstm = {
         # Pre-defined net params
         'name': 'CNN_LSTM',
@@ -94,8 +94,9 @@ def main():
         # Params to tune
         'ConvCh': [1, tune.randint(1, 25), tune.randint(1, 25)], 'HLDepth': tune.randint(1, 3),
         'HLs': tune.sample_from(lambda spec: np.random.random_integers(1, high=33, size=spec.config.HLDepth)),
-        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(1, 5), 'RNNHidden': tune.randint(10, 1001),
-        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1)
+        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(0, 5), 'RNNHidden': tune.randint(10, 501),
+        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1),
+        'weight_reg': tune.loguniform(2e-5,2e-1), 'batchnorm': tune.choice(['None','simple','learn'])
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
@@ -107,8 +108,9 @@ def main():
         # Params to tune
         'ConvCh': [1, tune.randint(1, 25), tune.randint(1, 25)], 'HLDepth': tune.randint(1, 3),
         'HLs': tune.sample_from(lambda spec: np.random.random_integers(1, high=33, size=spec.config.HLDepth)),
-        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(1, 5), 'RNNHidden': tune.randint(10, 1001),
-        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1)
+        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(0, 5), 'RNNHidden': tune.randint(10, 501),
+        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1),
+        'weight_reg': tune.loguniform(2e-5, 2e-1), 'batchnorm': tune.choice(['None', 'simple', 'learn'])
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
@@ -120,8 +122,9 @@ def main():
         # Params to tune
         'ConvCh': [1, tune.randint(1, 25), tune.randint(1, 25)], 'HLDepth': tune.randint(1, 3),
         'HLs': tune.sample_from(lambda spec: np.random.random_integers(1, high=33, size=spec.config.HLDepth)),
-        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(1, 5), 'RNNHidden': tune.randint(10, 1001),
-        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1)
+        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(0, 5), 'RNNHidden': tune.randint(10, 501),
+        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1),
+        'weight_reg': tune.loguniform(2e-5, 2e-1), 'batchnorm': tune.choice(['None', 'simple', 'learn'])
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
@@ -133,8 +136,9 @@ def main():
         # Params to tune
         'ConvCh': [1, tune.randint(1, 25), tune.randint(1, 25)], 'HLDepth': tune.randint(1, 3),
         'HLs': tune.sample_from(lambda spec: np.random.random_integers(1, high=33, size=spec.config.HLDepth)),
-        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(1, 5), 'RNNHidden': tune.randint(10, 1001),
-        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1)
+        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(0, 5), 'RNNHidden': tune.randint(10, 501),
+        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-4, 2e-2), 'epochs': tune.randint(1, max_epochs + 1),
+        'weight_reg': tune.loguniform(2e-5, 2e-1), 'batchnorm': tune.choice(['None', 'simple', 'learn'])
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
@@ -146,14 +150,16 @@ def main():
         # Params to tune
         'ConvCh': [1, tune.randint(1, 25), tune.randint(1, 25)], 'HLDepth': tune.randint(1, 3),
         'HLs': tune.sample_from(lambda spec: np.random.random_integers(1, high=33, size=spec.config.HLDepth)),
-        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(1, 5), 'RNNHidden': tune.randint(10, 1001),
-        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-6, 2e-2), 'epochs': tune.randint(1, max_epochs + 1)
+        'RNNIn': tune.randint(3, 21), 'RNNDepth': tune.randint(1, 5), 'RNNHidden': tune.randint(10, 501),
+        'droprate': tune.uniform(0, 0.3), 'lr': tune.loguniform(2e-6, 2e-2), 'epochs': tune.randint(1, max_epochs + 1),
+        'weight_reg': tune.loguniform(2e-5, 2e-1), 'batchnorm': tune.choice(['None', 'simple', 'learn'])
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
-    for config in [config_cnnlstm, config_saalstm, config_sarlstm, config_cnngru, config_cnnindrnn]:
-    #for config in [config_cnnlstm]:
-        config['name'] = 'RMSProp-{}'.format(config['name'])
+    #for config in [config_cnnlstm, config_saalstm, config_sarlstm, config_cnngru, config_cnnindrnn]:
+    for config in [config_cnnlstm, config_saalstm, config_sarlstm, config_cnngru]:
+        if global_optim == torch.optim.RMSprop:
+            config['name'] = 'RMSProp-{}'.format(config['name'])
         chkdir = 'Models/Tuning/{}'.format(config['name'])
         if not os.path.isdir(chkdir):
             os.makedirs(chkdir)
@@ -166,7 +172,7 @@ def main():
             metric="valloss",
             name=config['name'],
             mode="min",
-            num_samples=20,
+            num_samples=150,
             scheduler=scheduler,
         )
         df = result.results_df
