@@ -1,6 +1,7 @@
 import torch
 from libmodels.CONV_RECURRENT import  CONV_RECURRENT
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
+from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
 
 def load_model(model_path: str):
     dicts = torch.load(model_path)
@@ -20,3 +21,26 @@ def load_model(model_path: str):
     mdl.optimizer.load_state_dict(opt_dict)
     mdl.epochs_trained = dicts['epochs_trained']
     return (mdl)
+
+@torch.no_grad()
+def init_constant(net, val=0.5):
+    if type(net) == torch.nn.Linear:
+        net.weight.fill_(val)
+        if not net.bias == None: net.bias.fill_(val)
+    elif type(net) == torch.nn.Conv2d:
+        net.weight.fill_(val)
+        net.bias.fill_(val)
+    elif type(net) == torch.nn.Conv3d:
+        net.weight.fill_(val)
+        net.bias.fill_(val)
+    # elif type(net) == MHA:
+    #     net.weight.fill_(val)
+    #     net.bias.fill_(val)
+    elif type(net) == torch.nn.LSTM or \
+            type(net) == torch.nn.GRU or \
+            type(net) == indrnn:
+        for name, param in net.named_parameters():
+            if 'bias' in name:
+                param.fill_(val)
+            elif 'weight' in name:
+                param.fill_(val)

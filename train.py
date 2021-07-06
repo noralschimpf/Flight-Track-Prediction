@@ -32,9 +32,11 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 1
+    epochs = 300
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
+    attns = {0: 'None', 1: 'after', 2: 'replace'}
+    max_epochs = 300
     folds = 4
 
     dev = 'cuda:1'
@@ -46,36 +48,142 @@ def main():
 
     ## MODEL PARAMETERS
     #atts = ['None','after', 'replace']
-    atts = ['None']
+    #atts = ['None']
     #recur_types = [torch.nn.LSTM, torch.nn.GRU, indrnn]
-    recur_types = [torch.nn.LSTM]
-    rnn_lays = [1]
-    drop = 0.0
+    #recur_types = [torch.nn.LSTM]
+    #rnn_lays = [1]
+    #drop = 0.0
 
 
 
     # Uncomment block if generating valid file & split files
     total_products=['ECHO_TOP','VIL','uwind','vwind','tmp']
     #list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
-    list_products = [['ECHO_TOP']]
-    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=100)
+    list_products = [['ECHO_TOP']]; cube_height = 1
+    flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
+                   'KATL_KMCO': 1.5*60, 'KSEA_KDEN': 2.5*60}
+    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins)
     total_flights = len(fps)
 
-    cnnlstm = tune.Analysis('~/ray_results/CNN_LSTM')
-    cnngru = tune.Analysis('~/ray_results/CNN_GRU')
-    cnnindrnn = tune.Analysis('~/ray_results/CNN_IndRNN')
-    saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
-    sarlstm = tune.Analysis('~/ray_results/SA_LSTM')
-    cfgs = [x.get_best_config(metric='valloss',mode='min') for x in [cnnlstm, saalstm, sarlstm]]
-    cfg_lstm = cnnlstm.get_best_config(metric='valloss', mode='min')
+    #cnnlstm = tune.Analysis('~/ray_results/RMSProp-CNN_LSTM-CHDepths')
+    #cnngru = tune.Analysis('~/ray_results/CNN_GRU')
+    #cnnindrnn = tune.Analysis('~/ray_results/CNN_IndRNN')
+    #saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
+    #cfg_lstm = sarlstm.get_best_config(metric='valloss', mode='min')
+
+    config_cnnlstm = {
+        # Pre-defined net params
+        'name': 'CNN_LSTM-TUNED',
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.RMSprop,
+        # Params to tune
+        'ConvCh': [1, 28, 22], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 1000,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 1e-6, 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+
+    config_sarlstm = {
+        'name': 'SA_LSTM-TUNED',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
+        # Params to tune
+        'ConvCh': [1, 31, 8], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 1e-6, 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+
+    config_cnngru = {
+        'name': 'CNN_GRU-TUNED',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.RMSprop,
+        # Params to tune
+        'ConvCh': [1, 28, 22], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 650,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 1e-6, 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+
+    config_sargru = {
+        'name': 'SA_GRU-TUNED',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.RMSprop,
+        # Params to tune
+        'ConvCh': [1, 31, 8], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 1e-6, 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+    
+    config_dflt_cnnlstm = {
+        # Pre-defined net params
+        'name': 'CNN_LSTM-DFLT',
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.Adam,
+        # Params to tune
+        'ConvCh': [1, 2, 4], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
+        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 0., 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+
+    config_dflt_sarlstm = {
+        'name': 'SA_LSTM-DFLT',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
+        # Params to tune
+        'ConvCh': [1, 2, 4], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
+        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 0., 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+
+    config_dflt_cnngru = {
+        'name': 'CNN_GRU-DFLT',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.Adam,
+        # Params to tune
+        'ConvCh': [1, 2, 4], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
+        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 0., 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+
+    config_dflt_sargru = {
+        'name': 'SA_GRU-DFLT',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
+        # Params to tune
+        'ConvCh': [1, 2, 4], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
+        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 0., 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+
+    cfgs = [config_cnnlstm, config_cnngru, config_sarlstm, config_sargru]
+
     # Correct Models
     for config in cfgs:
         config['epochs'] = epochs
         config['device'] = dev
         if not 'weight_reg' in config.keys():
             config['weight_reg'] = 0.
-        config['batchnorm'] = 'simple'
-        if isinstance(config['optim'], str):
+        '''if isinstance(config['optim'], str):
             if 'Adam' in config['optim']:
                 config['optim'] = torch.optim.Adam
             elif 'RMS' in config['optim']:
@@ -90,9 +198,8 @@ def main():
             elif 'IndRNN' in config['rnn']:
                 config['rnn'] = indrnn
         if isinstance(config['HLs'], str): config['HLs'] = str_to_list(config['HLs'], int)
-        if isinstance(config['ConvCh'], str): config['ConvCh'] = str_to_list(config['ConvCh'], int)
-        #for key in config:
-        #    if 'RNN' in key: config[key] = cfg_lstm[key]
+        if isinstance(config['ConvCh'], str): config['ConvCh'] = str_to_list(config['ConvCh'], int)'''
+
 
     for products in list_products:
         cube_height = 3 if 'uwind' in products or 'vwind' in products or 'tmp' in products else 1
@@ -102,7 +209,7 @@ def main():
             #train_flights = np.random.choice(total_flights, int(total_flights * .75), replace=False)
             #test_flights = list(set(range(len(fps))) - set(train_flights))
 
-            #cross-validation split
+            # cross-validation split
             foldstr = 'fold{}-{}'.format(fold+1,folds)
             test_flights = list(range( int(fold*total_flights/folds), int(((fold+1)*total_flights)/folds) ))
             train_flights = list(set(range(total_flights)) - set(test_flights))
@@ -121,22 +228,28 @@ def main():
             df_testfiles.to_csv('test_flight_samples.txt'.format(foldstr))
 
 
-            '''
-            # Uncomment block if validated & split files already exist
-            df_trainfiles = pd.read_csv('train_flight_samples.txt')
-            print('Loading Train Files')
-            fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
-            fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
-            wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
-            #TODO: eliminate train_flights    
-            '''
+
+            # # Uncomment block if validated & split files already exist
+            # df_trainfiles = pd.read_csv('/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/train_flight_samples.txt')
+            # print('Loading Train Files')
+            # fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
+            # fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
+            # wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
+            #
+            # df_testfiles = pd.read_csv(
+            #     '/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/test_flight_samples.txt')
+            # print('Loading Test Files')
+            # fps_test, fts_test, wcs_test, test_flights = [], [], [], []
+            # fps_test, fts_test = df_testfiles['flight plans'].values, df_testfiles['flight tracks'].values
+            # wcs_test, test_flights = df_testfiles['weather cubes'].values, list(range(len(fps_test)))
+            # foldstr = 'fold1-0'
 
             train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, products, ToTensor(), device='cpu')
             test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, products, ToTensor(), device='cpu')
 
             # train_model
             for config in cfgs:
-                mdl = fit(config, train_dataset, test_dataset, raytune=False)
+                mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=True, const=False)
                 mdl.epochs_trained = config['epochs']
                 mdl.save_model(override=True)
                 shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))
@@ -167,145 +280,6 @@ def main():
                 shutil.copy('test_flight_samples.txt', 'Models/{}/{}/{}/test_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
                 shutil.copy('train_flight_samples.txt', 'Models/{}/{}/{}/train_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
                 shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr))
-
-
-'''def fit(mdl: CONV_RECURRENT, train_dl: torch.utils.data.DataLoader, test_dl: torch.utils.data.DataLoader, epochs: int, model_name: str = 'Default', ):
-    epoch_losses = torch.zeros(epochs, device=mdl.device)
-    epoch_test_losses = torch.zeros(epochs, device=mdl.device)
-    for ep in tqdm.trange(epochs, desc='{} epoch'.format(mdl.model_name().replace('-OPTAdam','').replace('LOSS','')), position=0, leave=False):
-        losses = torch.zeros(len(train_dl), device=mdl.device)
-
-        for batch_idx, (fp, ft, wc) in enumerate(
-                tqdm.tqdm(train_dl, desc='flight', position=1, leave=False)):  # was len(flight_data)
-            # Extract flight plan, flight track, and weather cubes
-            if mdl.device.__contains__('cuda'):
-                fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                ft = ft[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                wc = wc.cuda(device=mdl.device, non_blocking=True)
-            else:
-                fp, ft = fp[:, :, :], ft[:, :, :]
-            if mdl.paradigm == 'Regression':
-                print("\nFlight {}/{}: ".format(batch_idx + 1, len(train_dl)) + str(len(fp)) + " points")
-                for pt in tqdm.trange(len(wc)):
-                    mdl.optimizer.zero_grad()
-                    lat, lon, alt = fp[0][0].clone().detach(), fp[0][1].clone().detach(). fp[0][2].clone().detach()
-                    if mdl.rnn_type == torch.nn.LSTM:
-                        mdl.hidden_cell = (
-                            lat.repeat(1, 1, mdl.rnn_hidden),
-                            lon.repeat(1, 1, mdl.rnn_hidden),
-                            alt.repeate(1,1,mdl.rnn_hidden))
-                    elif mdl.rnn_type == torch.nn.GRU:
-                        mdl.hidden_cell = torch.cat(lat.repeat(1, 1, mdl.rnn_hidden / 3),
-                                                    lon.repeat(1, 1, mdl.rnn_hidden / 3),
-                                                    alt.repeat(1, 1, mdl.rnn_hidden / 3),
-                                                    torch.zeros(1, 1, mdl.rnn_hidden - (3*int(mdl.rnn_hidden/3))))
-                    y_pred = mdl(wc[:pt + 1], fp[:pt + 1])
-                    # print(y_pred)
-                    single_loss = mdl.loss_function(y_pred, ft[:pt + 1].view(-1, 2))
-                    if batch_idx < len(train_dl) - 1 and pt % 50 == 0:
-                        single_loss.backward()
-                        mdl.optimizer.step()
-                    if batch_idx == len(train_dl) - 1:
-                        losses = torch.cat((losses, single_loss.view(-1)))
-            elif mdl.paradigm == 'Seq2Seq':
-                mdl.optimizer.zero_grad()
-
-                lat, lon, alt = fp[0,:,0], fp[0,:,1], fp[0,:,2]
-                coordlen = int(mdl.rnn_hidden/3)
-                padlen = mdl.rnn_hidden - 3*coordlen
-                tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, train_dl.batch_size),
-                                        lon.repeat(coordlen).view(-1, train_dl.batch_size),
-                                        alt.repeat(coordlen).view(-1, train_dl.batch_size),
-                                        torch.zeros(padlen, len(lat),
-                                        device=mdl.device))).T.view(1,-1,mdl.rnn_hidden)
-                mdl.init_hidden_cell(tns_coords)
-
-                y_pred = mdl(wc, fp[:])
-                single_loss = mdl.loss_function(y_pred, ft)
-                losses[batch_idx] = single_loss.view(-1).detach().item()
-                single_loss.backward()
-                mdl.optimizer.step()
-
-            if batch_idx == len(train_dl) - 1:
-                epoch_losses[ep] = torch.mean(losses).view(-1)
-
-        # TODO: ADD EVAL ON TEST DATA
-        mdl.eval()
-        test_losses = torch.zeros(len(test_dl), device=mdl.device)
-        for test_batch, (fp, ft, wc) in enumerate(test_dl):
-            if mdl.device.__contains__('cuda'):
-                fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                ft = ft[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                wc = wc.cuda(device=mdl.device, non_blocking=True)
-            else:
-                fp, ft = fp[:, :, :], ft[:, :, :]
-
-            if mdl.paradigm == 'Seq2Seq':
-                mdl.optimizer.zero_grad()
-                lat, lon, alt = fp[0, :, 0], fp[0, :, 1], fp[0, :, 2]
-                coordlen = int(mdl.rnn_hidden / 3)
-                padlen = mdl.rnn_hidden - 3 * coordlen
-                tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, test_dl.batch_size),
-                                           lon.repeat(coordlen).view(-1, test_dl.batch_size),
-                                           alt.repeat(coordlen).view(-1, test_dl.batch_size),
-                                           torch.zeros(padlen, len(lat),
-                                                       device=mdl.device))).T.view(1, -1, mdl.rnn_hidden)
-                mdl.init_hidden_cell(tns_coords)
-
-                y_pred = mdl(wc, fp[:])
-                single_loss = mdl.loss_function(y_pred, ft)
-                test_losses[test_batch] = single_loss.view(-1).detach().item()
-        epoch_test_losses[ep] = test_losses.mean().view(-1)
-        mdl.train()
-
-        if ep % 10 == 0:
-            if mdl.device.__contains__('cuda'):
-                losses = losses.cpu()
-                test_losses = test_losses.cpu()
-            plt.plot(losses.detach().numpy(), label='train data')
-            plt.plot(test_losses.detach().numpy(), label='test data')
-            plt.legend()
-            plt.title('Losses (Epoch {})'.format(ep + 1))
-            plt.xlabel('Flight')
-            plt.ylabel('Loss (MSE)')
-            # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
-            plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
-            plt.close()
-            del losses
-            gc.collect()
-        if ep % 50 == 0:
-            mdl.save_model(override=True)
-
-
-
-    if mdl.device.__contains__('cuda'):
-        epoch_losses = epoch_losses.cpu()
-        epoch_test_losses = epoch_test_losses.cpu()
-    e_losses = epoch_losses.detach().numpy()
-    e_test_losses = epoch_test_losses.detach().numpy()
-
-    plt.plot(e_losses, label='train data')
-    plt.plot(e_test_losses, label='test data')
-    plt.legend()
-    plt.title('Avg Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Avg Loss (MSE)')
-    plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
-    plt.close()
-
-    plt.plot(e_losses[:], label='train data')
-    plt.plot(e_test_losses[:], label='test data')
-    plt.legend()
-    plt.title('Avg Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Avg Loss (MSE)')
-    plt.ylim([0, .01])
-    plt.yticks(np.linspace(0, .01, 11))
-    plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
-    plt.close()
-
-    df_eloss = pd.DataFrame({'loss': e_losses})
-    df_eloss.to_csv('model_epoch_losses.txt')'''
 
 
 if __name__ == '__main__':

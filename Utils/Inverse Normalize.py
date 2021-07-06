@@ -5,13 +5,34 @@ import pandas as pd
 import tqdm
 
 def inv_norm(path_csv: str, path_data: str):
+
+    # Create MinMax Scaler using overall parameters
+    lat_scaler = MinMaxScaler(feature_range=[0,1])
+    lon_scaler = MinMaxScaler(feature_range=[0,1])
+    alt_scaler = MinMaxScaler(feature_range=[0,1])
+    vil_scaler = MinMaxScaler(feature_range=[0,1])
+    tmp_scaler = MinMaxScaler(feature_range=[0,1])
+    uw_scaler = MinMaxScaler(feature_range=[0,1])
+    vw_scaler = MinMaxScaler(feature_range=[0,1])
+
+    # lat_scaler.fit(nda_minmax[0,:].reshape(-1,1))
+    # lon_scaler.fit(nda_minmax[1,:].reshape(-1,1))
+    # alt_scaler.fit(nda_minmax[2,:].reshape(-1,1))
+    lat_scaler.fit(np.array([[24.],[50.]]))
+    lon_scaler.fit(np.array([[-126.],[-66.]]))
+    alt_scaler.fit(np.array([[-1000.],[64000.]]))
+    #alt_scaler.fit(np.array([[-1000.],[80000.]]))
+    vil_scaler.fit(np.array([[-.00244140625], [80]]))
+    tmp_scaler.fit(np.array([[150],[350]]))
+    uw_scaler.fit(np.array([[-150],[150]]))
+    vw_scaler.fit(np.array([[-150],[150]]))
+
+    '''
     # Generate Transforms from MinMax.CSV
     nda_minmaxes = np.genfromtxt(path_csv,delimiter=',').reshape(3,-1)
-
     lat_scaler = MinMaxScaler()
     lon_scaler = MinMaxScaler()
     alt_scaler = MinMaxScaler()
-
     lat_min, lat_max = nda_minmaxes[0,:].min(), nda_minmaxes[0,:].max()
     lon_min, lon_max = nda_minmaxes[1, :].min(), nda_minmaxes[1, :].max()
     alt_min, alt_max = nda_minmaxes[2, :].min(), nda_minmaxes[2, :].max()
@@ -20,6 +41,7 @@ def inv_norm(path_csv: str, path_data: str):
     lat_scaler.fit(nda_minmaxes[0,:].reshape(-1,1))
     lon_scaler.fit(nda_minmaxes[1,:].reshape(-1,1))
     alt_scaler.fit(nda_minmaxes[2,:].reshape(-1,1))
+    '''
 
     # Inverse Transform each Saved CSV
     if not os.path.isdir('{}/Denormed'.format(path_data)):
