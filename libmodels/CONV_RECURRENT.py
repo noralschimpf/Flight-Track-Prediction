@@ -12,9 +12,9 @@ import os
 
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
-    def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=16,
+    def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=[16],
                  rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3, batchnorm='None',
-                 attn='None', batch_size=1, droprate = .2, features: int = 1,
+                 attn='None', batch_size=1, droprate = .2, features: list =  ['ECHO_TOP'],
                  optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
         super().__init__()
         # convolution layer for weather feature extraction prior to the RNN
@@ -134,7 +134,8 @@ class CONV_RECURRENT(nn.Module):
             self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
 
         if self.device.__contains__('cuda'):
-            self.cuda(self.device)
+            self.cuda()
+            self.device = '{}:{}'.format(self.fc[0].bias.device.type, self.fc[0].bias.device.index)
 
         if not issubclass(optim, torch.optim.Optimizer):
             optim = type(optim)

@@ -2,14 +2,31 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import os, shutil, gc, tqdm, json
+import os, shutil, gc, tqdm, json, random
 from custom_dataset import pad_batch
 from libmodels.CONV_RECURRENT import CONV_RECURRENT
-from libmodels.model import load_model
+from libmodels.model import load_model, init_constant
 from ray import tune
 
 def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
-        raytune: bool = False, model_name: str = 'Default'):
+        raytune: bool = False, determinist: bool = True, const: bool = False, model_name: str = 'Default'):
+    print(config['mdldir'])
+    if raytune or determinist:
+	    # FORCE DETERMINISTIC INITIALIZATION
+	    seed = 1234
+	    random.seed(seed)
+	    os.environ['PYTHONHASHSEED']=str(seed)
+	    os.environ['CUBLAS_WORKSPACE_CONFIG']=':4096:8'
+	    np.random.seed(seed)
+	    torch.manual_seed(seed)
+	    torch.cuda.manual_seed(seed)
+	    torch.cuda.manual_seed_all(seed)
+	    #torch.backends.cudnn.deterministic = True
+	    torch.backends.cudnn.benchmark = False
+
+	    #torch.backends.cudnn.enabled = False
+	    torch.use_deterministic_algorithms(True)
+
     train_dl = torch.utils.data.DataLoader(train_dataset, collate_fn=pad_batch, batch_size=config['batch_size'], num_workers=0, pin_memory=True,
                           shuffle=False, drop_last=True)
     test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
@@ -22,6 +39,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                          conv_output=config['ConvCh'][2], batchnorm=config['batchnorm'],
                          dense_hidden=config['HLs'], rnn_input=config['RNNIn'], rnn_hidden=config['RNNHidden'],
                          rnn_output=3, droprate=config['droprate'])
+    if raytune or const: mdl.apply(init_constant)
     mdl.optimizer = config['optim'](mdl.parameters(), lr=config['lr'], weight_decay=config['weight_reg'])
 
     if checkpoint_dir:
