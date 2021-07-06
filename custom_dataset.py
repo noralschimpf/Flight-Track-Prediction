@@ -59,7 +59,7 @@ class ToTensor(object):
             print("WARNING: object of type " + str(type(sample)) + " not converted")
             return sample
 
-def ValidFiles(root_dir: str, products: List[str], under_min: int = 100):
+def ValidFiles(root_dir: str, products: List[str], under_min: dict):
     dates_fp = os.listdir(root_dir + '/Flight Plans')
     dates_ft = os.listdir(root_dir + '/Flight Tracks')
 
@@ -116,8 +116,9 @@ def ValidFiles(root_dir: str, products: List[str], under_min: int = 100):
         df_fp = pd.read_csv(flight_plan[i], usecols=(0, 1, 2))
         df_ft = pd.read_csv(flight_track[i], usecols=(0, 1, 2))
         wCubes = [DSet(weather_cube[i][x], 'r', format='netCDF4') for x in range(len(weather_cube[0]))]
-        if df_fp.shape[0] < under_min or df_ft.shape[0] < under_min or \
-                min([wCubes[x][p].shape[0] for x in range(len(wCubes)) for p in products if p in wCubes[x].variables.keys()]) < under_min:
+        minlen = [under_min[key] for key in under_min if key in flight_plan[i]][0]
+        if df_fp.shape[0] < minlen or df_ft.shape[0] < minlen or \
+                min([wCubes[x][p].shape[0] for x in range(len(wCubes)) for p in products if p in wCubes[x].variables.keys()]) < minlen:
             list_underMin.append(i)
     print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), under_min, list_underMin))
     for i in range(len(list_underMin)):
