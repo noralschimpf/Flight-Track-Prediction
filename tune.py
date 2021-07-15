@@ -37,13 +37,15 @@ def main():
     list_products = ['ECHO_TOP']
     cube_height = 1
 
-    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=100)
+    flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
+                   'KATL_KMCO': 1.5*60, 'KSEA_KDEN': 2.5*60}
+    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins)
     total_flights = len(fps)
 
     # Random split
-    # train_flights = np.random.choice(total_flights, int(total_flights * .75), replace=False)
-    # test_flights = list(set(range(len(fps))) - set(train_flights))
-    # print('Test Flights: {}'.format(test_flights))
+    train_flights = np.random.choice(total_flights, int(total_flights * .75), replace=False)
+    test_flights = list(set(range(len(fps))) - set(train_flights))
+    print('Test Flights: {}'.format(test_flights))
 
     # cross-validation split
     '''foldstr = 'fold{}-{}'.format(fold + 1, folds)
@@ -51,35 +53,35 @@ def main():
     train_flights = list(set(range(total_flights)) - set(test_flights))
     print('fold {}/{}\t{}-{} test flights'.format(fold + 1, folds, min(test_flights), max(test_flights)))'''
 
-    # train_flights.sort()
-    # test_flights.sort()
-    #
-    # fps_train, fps_test = SplitStrList(fps, test_flights)
-    # fts_train, fts_test = SplitStrList(fts, test_flights)
-    # wcs_train, wcs_test = SplitStrList(wcs, test_flights)
-    #
-    # df_trainfiles = pd.DataFrame(
-    #     data={'flight plans': fps_train, 'flight tracks': fts_train, 'weather cubes': wcs_train})
-    # df_testfiles = pd.DataFrame(
-    #     data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
-    # df_trainfiles.to_csv('tune_train_flight_samples.txt')
-    # df_testfiles.to_csv('tune_test_flight_samples.txt')
+    train_flights.sort()
+    test_flights.sort()
+
+    fps_train, fps_test = SplitStrList(fps, test_flights)
+    fts_train, fts_test = SplitStrList(fts, test_flights)
+    wcs_train, wcs_test = SplitStrList(wcs, test_flights)
+
+    df_trainfiles = pd.DataFrame(
+        data={'flight plans': fps_train, 'flight tracks': fts_train, 'weather cubes': wcs_train})
+    df_testfiles = pd.DataFrame(
+        data={'flight plans': fps_test, 'flight tracks': fts_test, 'weather cubes': wcs_test})
+    #df_trainfiles.to_csv('tune_train_flight_samples.txt')
+    #df_testfiles.to_csv('tune_test_flight_samples.txt')
 
 
     # Uncomment block if validated & split files already exist
-    df_trainfiles = pd.read_csv('/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/train_flight_samples.txt')
-    print('Loading Train Files')
-    fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
-    fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
-    wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
-    wcs_train = [[x.split('\'')[1]] for x in wcs_train]
-
-    df_testfiles = pd.read_csv('/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/test_flight_samples.txt')
-    print('Loading Test Files')
-    fps_test, fts_test, wcs_test, test_flights = [],[],[],[]
-    fps_test, fts_test = df_testfiles['flight plans'].values, df_testfiles['flight tracks'].values
-    wcs_test, test_flights = df_testfiles['weather cubes'].values, list(range(len(fps_test)))
-    wcs_test = [[x.split('\'')[1]] for x in wcs_test]
+    # df_trainfiles = pd.read_csv('/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/train_flight_samples.txt')
+    # print('Loading Train Files')
+    # fps_train, fts_train, wcs_train, train_flights = [],[],[],[]
+    # fps_train, fts_train = df_trainfiles['flight plans'].values, df_trainfiles['flight tracks'].values
+    # wcs_train, train_flights = df_trainfiles['weather cubes'].values, list(range(len(fps_train)))
+    # wcs_train = [[x.split('\'')[1]] for x in wcs_train]
+    #
+    # df_testfiles = pd.read_csv('/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/test_flight_samples.txt')
+    # print('Loading Test Files')
+    # fps_test, fts_test, wcs_test, test_flights = [],[],[],[]
+    # fps_test, fts_test = df_testfiles['flight plans'].values, df_testfiles['flight tracks'].values
+    # wcs_test, test_flights = df_testfiles['weather cubes'].values, list(range(len(fps_test)))
+    # wcs_test = [[x.split('\'')[1]] for x in wcs_test]
 
 
     train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, list_products, ToTensor(), device='cpu')
@@ -91,9 +93,12 @@ def main():
     global_optim = torch.optim.RMSprop
     config_cnnlstm_opt = {
         # Pre-defined net params
-        'name': 'CNN_LSTM-OPT',
+        'name': 'CNN_LSTM-OPTFULL-RAND',
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products, 'attn': attns[0], 'batch_size': 1, 'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
+        'features': list_products, 'attn': attns[0], 'batch_size': 1,
+        #'optim': tune.grid_search(['sgd','sgd+momentum','sgd+nesterov','adam','rmsprop','adadelta','adagrad']),
+        'optim': tune.grid_search(['sgd+momentum']),
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 1000,
@@ -166,7 +171,7 @@ def main():
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
-    for config in [config_cnnlstm_opt, config_sarlstm_opt, config_cnngru_opt, config_sargru_opt]:
+    for config in [config_cnnlstm_opt]:
         #if global_optim == torch.optim.RMSprop:
         #    config['name'] = 'RMSProp-{}'.format(config['name'])
         chkdir = 'Models/Tuning/{}'.format(config['name'])
@@ -187,18 +192,21 @@ def main():
         # scheduler = sch.ASHAScheduler(max_t=max_epochs, grace_period=1, reduction_factor=2)
         fifo_sched = sch.FIFOScheduler()
         result = tune.run(
-            tune.with_parameters(fit, train_dataset=train_dataset, test_dataset=test_dataset, raytune=True),
+            tune.with_parameters(fit, train_dataset=train_dataset, test_dataset=test_dataset, raytune=True,
+                                 determinist=False, const=False),
             resources_per_trial={"cpu": 4, "gpu": gputil},
             config=config,
             metric="valloss",
             name=config['name'],
             mode="min",
             #local_dir='/media/dualboot/New Volume/NathanSchimpf/Tuning',
-            num_samples=smpl,
+            num_samples=5,
             scheduler=fifo_sched
         )
         df = result.results_df
         print(df)
+        df_trainfiles.to_csv('Models/Tuning/{}_TRAINSPLIT.csv'.format(config['name']))
+        df_testfiles.to_csv('Models/Tuning/{}_TESTSPLIT.csv'.format(config['name']))
         df.to_csv('Models/Tuning/{}.csv'.format(config['name']))
 
 
