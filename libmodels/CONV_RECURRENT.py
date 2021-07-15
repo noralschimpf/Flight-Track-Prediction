@@ -256,6 +256,17 @@ class CONV_RECURRENT(nn.Module):
             #h_ = [layers, batch, hidden_size]
             self.hidden_cell = torch.cat((tns_coords.repeat(self.rnn_layers, 1, 1),))
 
+    def update_dict(self):
+        self.struct_dict = {'class': str(type(self)).split('\'')[1],
+                            'device': self.device, 'paradigm': self.paradigm,
+                            'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
+                            'conv_output': self.conv_output, 'attntype': self.attntype,
+                            'dense_hidden': self.dense_hidden, 'features': self.features,
+                            'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
+                            'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
+                            'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
+                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
+
 
     def save_model(self, override_path: str = None, override: bool = False):
         model_name = self.model_name()

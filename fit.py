@@ -10,7 +10,8 @@ from ray import tune
 
 def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
         raytune: bool = False, determinist: bool = True, const: bool = False, model_name: str = 'Default'):
-    print(config['mdldir'])
+    #print(config['mdldir'])
+
     if raytune or determinist:
 	    # FORCE DETERMINISTIC INITIALIZATION
 	    seed = 1234
@@ -39,8 +40,22 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                          conv_output=config['ConvCh'][2], batchnorm=config['batchnorm'],
                          dense_hidden=config['HLs'], rnn_input=config['RNNIn'], rnn_hidden=config['RNNHidden'],
                          rnn_output=3, droprate=config['droprate'])
-    if raytune or const: mdl.apply(init_constant)
-    mdl.optimizer = config['optim'](mdl.parameters(), lr=config['lr'], weight_decay=config['weight_reg'])
+    if const: mdl.apply(init_constant)
+    if config['optim'] == 'sgd':
+        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=.01, weight_decay=config['weight_reg'])
+    elif config['optim'] == 'sgd+momentum':
+        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=.01, momentum=0.5, weight_decay=config['weight_reg'])
+    elif config['optim'] == 'sgd+nesterov':
+        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=.01, momentum=0.5, nesterov=True, weight_decay=config['weight_reg'])
+    elif config['optim'] == 'adam':
+        mdl.optimizer = torch.optim.Adam(mdl.parameters(), weight_decay=config['weight_reg'])
+    elif config['optim'] == 'rmsprop':
+        mdl.optimizer = torch.optim.RMSprop(mdl.parameters(), lr=.0001, weight_decay=config['weight_reg'])
+    elif config['optim'] == 'adadelta':
+        mdl.optimizer = torch.optim.Adadelta(mdl.parameters(), weight_decay=config['weight_reg'])
+    elif config['optim'] == 'adagrad':
+        mdl.optimizer = torch.optim.Adagrad(mdl.parameters(), weight_decay=config['weight_reg'])
+    mdl.update_dict()
 
     if checkpoint_dir:
         chkpt = os.path.join(checkpoint_dir, 'checkpoint')

@@ -32,11 +32,11 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 300
+    epochs = 500
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     attns = {0: 'None', 1: 'after', 2: 'replace'}
-    max_epochs = 300
+    max_epochs = 3
     folds = 4
 
     dev = 'cuda:1'
@@ -75,7 +75,8 @@ def main():
         # Pre-defined net params
         'name': 'CNN_LSTM-TUNED',
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.RMSprop,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
+        'optim': '', #'optim': torch.optim.RMSprop,
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 1000,
@@ -88,7 +89,8 @@ def main():
         'name': 'SA_LSTM-TUNED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': 1,
+        'optim': '', #'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 31, 8], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
@@ -101,7 +103,8 @@ def main():
         'name': 'CNN_GRU-TUNED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.RMSprop,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
+        'optim': '', #'optim': torch.optim.RMSprop,
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 650,
@@ -114,7 +117,8 @@ def main():
         'name': 'SA_GRU-TUNED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.RMSprop,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': 1,
+        'optim': '', #'optim': torch.optim.RMSprop,
         # Params to tune
         'ConvCh': [1, 31, 8], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
@@ -127,7 +131,8 @@ def main():
         # Pre-defined net params
         'name': 'CNN_LSTM-DFLT',
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.Adam,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
+        'optim': '', #'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
