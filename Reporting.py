@@ -17,7 +17,7 @@ import Utils.ErrorFn as fn
 valid_products = ['ECHO_TOP','VIL','tmp','uwind','vwind']
 mdl_product_dirs = [os.path.join(os.path.abspath('.'), 'Models/{}'.format(x)) for x in os.listdir('Models') if
                         os.path.isdir('Models/{}'.format(x)) and any([y in x for y in valid_products])]
-mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS500' in y]
+mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS300' in y]
 mdls = [x for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCH' in x]
 df_summary = pd.DataFrame()
 for mdl in mdl_dirs:
