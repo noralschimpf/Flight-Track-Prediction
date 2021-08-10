@@ -9,10 +9,10 @@ from libmodels.model import load_model, init_constant
 from ray import tune
 
 def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
-        raytune: bool = False, determinist: bool = True, const: bool = False, model_name: str = 'Default'):
+        raytune: bool = False, determinist: bool = True, const: bool = False, gradclip: bool = False, model_name: str = 'Default'):
     #print(config['mdldir'])
 
-    if raytune or determinist:
+    if determinist:
 	    # FORCE DETERMINISTIC INITIALIZATION
 	    seed = 1234
 	    random.seed(seed)
@@ -42,19 +42,39 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                          rnn_output=3, droprate=config['droprate'])
     if const: mdl.apply(init_constant)
     if config['optim'] == 'sgd':
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=.01, weight_decay=config['weight_reg'])
+        #lr, mom, dec, nest= 0.001, 0.0, config['weight_reg'], False
+        lr, mom, dec, nest = 0.01, 0.7, config['weight_reg'], True
+        if 'forcelr' in config: lr = config['forcelr']
+        if 'forcemom' in config: mom = config['forcemom']
+        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=lr, weight_decay=dec, momentum=mom, nesterov=nest)
     elif config['optim'] == 'sgd+momentum':
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=.01, momentum=0.5, weight_decay=config['weight_reg'])
+        lr, mom, dec, nest = 0.001, 0.0, config['weight_reg'], False
+        if 'forcelr' in config: lr = config['forcelr']
+        if 'forcemom' in config: mom = config['forcemom']
+        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=1e-5, momentum=0.5, nesterov=False, weight_decay=dec)
     elif config['optim'] == 'sgd+nesterov':
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=.01, momentum=0.5, nesterov=True, weight_decay=config['weight_reg'])
+        lr, mom, dec, nest = 0.001, 0.0, config['weight_reg'], False
+        if 'forcelr' in config: lr = config['forcelr']
+        if 'forcemom' in config: mom = config['forcemom']
+        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=lr, momentum=mom, nesterov=True, weight_decay=dec)
     elif config['optim'] == 'adam':
-        mdl.optimizer = torch.optim.Adam(mdl.parameters(), weight_decay=config['weight_reg'])
+        lr=0.001
+        if 'forcelr' in config: lr = config['forcelr']
+        mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
     elif config['optim'] == 'rmsprop':
-        mdl.optimizer = torch.optim.RMSprop(mdl.parameters(), lr=.0001, weight_decay=config['weight_reg'])
+        lr = 0.001
+        if 'forcelr' in config: lr = config['forcelr']
+        mdl.optimizer = torch.optim.RMSprop(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
     elif config['optim'] == 'adadelta':
-        mdl.optimizer = torch.optim.Adadelta(mdl.parameters(), weight_decay=config['weight_reg'])
+        lr = 1.
+        if 'forcelr' in config: lr = config['forcelr']
+        mdl.optimizer = torch.optim.Adadelta(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
     elif config['optim'] == 'adagrad':
-        mdl.optimizer = torch.optim.Adagrad(mdl.parameters(), weight_decay=config['weight_reg'])
+        lr = 0.001
+        if 'forcelr' in config: lr = config['forcelr']
+        mdl.optimizer = torch.optim.Adagrad(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
+    if 'forcestep' in config and 'forcegamma' in config:
+        mdl.sched = torch.optim.lr_scheduler.StepLR(mdl.optimizer, step_size=config['forcestep'],gamma=config['forcegamma'])
     mdl.update_dict()
 
     if checkpoint_dir:
@@ -117,10 +137,13 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 single_loss = mdl.loss_function(y_pred, ft)
                 losses[batch_idx] = single_loss.view(-1).detach().item()
                 single_loss.backward()
+                if gradclip: torch.nn.utils.clip_grad_norm_(mdl.parameters(), max_norm=2, norm_type=2)
                 mdl.optimizer.step()
 
             if batch_idx == len(train_dl) - 1:
                 epoch_losses[ep] = torch.mean(losses).view(-1)
+
+        if hasattr(mdl, 'sched'): mdl.sched.step()
 
         mdl.eval()
         test_losses = torch.zeros(len(test_dl), device=mdl.device)
@@ -168,6 +191,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         if (not raytune) and ep % 50 == 0:
             mdl.save_model(override=True)
         if raytune:
+            if torch.isnan(epoch_test_losses[ep]): raise ValueError('Epoch Loss is NaN')
             with tune.checkpoint_dir(step=ep) as checkpoint_dir:
                 path = os.path.join(checkpoint_dir, 'checkpoint')
                 with open(path,"w") as f:

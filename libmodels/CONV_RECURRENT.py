@@ -266,6 +266,8 @@ class CONV_RECURRENT(nn.Module):
                             'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
                             'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
                             'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
+        if hasattr(self, 'sched'):
+            self.struct_dict['sched'] = self.sched
 
 
     def save_model(self, override_path: str = None, override: bool = False):
