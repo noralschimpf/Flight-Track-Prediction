@@ -32,7 +32,7 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 500
+    epochs = 300
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     attns = {0: 'None', 1: 'after', 2: 'replace'}
@@ -61,7 +61,7 @@ def main():
     #list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
     list_products = [['ECHO_TOP']]; cube_height = 1
     flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
-                   'KATL_KMCO': 1.5*60, 'KSEA_KDEN': 2.5*60}
+                   'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60}
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins)
     total_flights = len(fps)
 
@@ -104,7 +104,8 @@ def main():
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
         'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
-        'optim': '', #'optim': torch.optim.RMSprop,
+         #'optim': torch.optim.RMSprop,
+        'optim': 'rmsprop', 'forcelr': 0.01, 'forcegamma': 0.5, 'forcestep': 10,
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 650,
@@ -118,7 +119,8 @@ def main():
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
         'features': list_products[0], 'attn': attns[2], 'batch_size': 1,
-        'optim': '', #'optim': torch.optim.RMSprop,
+        #'optim': torch.optim.RMSprop,
+        'optim': 'rmsprop', 'forcelr': 0.01, 'forcegamma': 0.5, 'forcestep': 10,
         # Params to tune
         'ConvCh': [1, 31, 8], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
@@ -180,8 +182,8 @@ def main():
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
-    cfgs = [config_cnnlstm, config_cnngru, config_sarlstm, config_sargru]
-
+    #cfgs = [config_cnnlstm, config_cnngru, config_sarlstm, config_sargru]
+    cfgs = [config_sargru]
     # Correct Models
     for config in cfgs:
         config['epochs'] = epochs
@@ -254,7 +256,7 @@ def main():
 
             # train_model
             for config in cfgs:
-                mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=True, const=False)
+                mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=True, const=False, gradclip=True)
                 mdl.epochs_trained = config['epochs']
                 mdl.save_model(override=True)
                 shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))

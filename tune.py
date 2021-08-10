@@ -38,7 +38,7 @@ def main():
     cube_height = 1
 
     flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
-                   'KATL_KMCO': 1.5*60, 'KSEA_KDEN': 2.5*60}
+                   'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60}
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins)
     total_flights = len(fps)
 
@@ -98,12 +98,12 @@ def main():
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
         'features': list_products, 'attn': attns[0], 'batch_size': 1,
         #'optim': tune.grid_search(['sgd','sgd+momentum','sgd+nesterov','adam','rmsprop','adadelta','adagrad']),
-        'optim': tune.grid_search(['sgd+momentum']),
+        'optim': tune.grid_search(['adam']),
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 1000,
         'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
-        'weight_reg': 1e-6, 'batchnorm': 'None'
+        'weight_reg': 1e-8, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
     config_cnnlstm_ovf = {
@@ -141,29 +141,78 @@ def main():
         'ConvCh': [1, 31, 8], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
         'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
-        'weight_reg': 1e-6, 'batchnorm': 'None'
+        'weight_reg': 1e-8, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
-    config_cnngru_opt = {
-        'name': 'CNN_GRU-OPT',
+    config_cnngru_optsched = {
+        'name': 'CNN_GRU-OPTFULL-SCHED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products, 'attn': attns[0], 'batch_size': 1, 'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
+        'features': list_products, 'attn': attns[0], 'batch_size': 1, #'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
         # Params to tune
+        'optim': tune.grid_search(['sgd+nesterov','adam', 'rmsprop']),
+        'forcelr': 0.01, 'forcemom':0.5, 'forcenest': True,
+        'forcegamma': tune.grid_search([0.1,0.5,0.9]), 'forcestep':tune.grid_search([10,30,50]),
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 650,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 1e-8, 'batchnorm': 'None'
+    }
+    config_cnngru_SGD = {
+        'name': 'CNN_GRU-SGD',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products, 'attn': attns[0], 'batch_size': 1, #'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
+        # Params to tune
+        'optim': tune.grid_search(['sgd']),
+        'forcelr': tune.grid_search([10**x for x in range(-6,0)]), 'forcemom': tune.grid_search(np.linspace(0,1,11).tolist()),
+        'forcenest': tune.grid_search([False, True]),
+        'ConvCh': [1, 28, 22], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 650,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 1e-8, 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+    config_sargru_SGD = {
+        'name': 'SAR_GRU-SGD',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products, 'attn': attns[2], 'batch_size': 1,
+        # Params to tune
+        'optim': tune.grid_search(['sgd']),
+        'forcelr': tune.grid_search([10 ** x for x in range(-6, 0)]),
+        'forcemom': tune.grid_search(np.linspace(0, 1, 11).tolist()),
+        'forcenest': tune.grid_search([False, True]),
+        'ConvCh': [1, 31, 8], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
         'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
         'weight_reg': 1e-6, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
-
     config_sargru_opt = {
-        'name': 'SA_GRU-OPT',
+        'name': 'SAR_GRU-OPTFULL-RAND',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products, 'attn': attns[2], 'batch_size': 1, 'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
+        'features': list_products, 'attn': attns[2], 'batch_size': 1, #'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
         # Params to tune
+        'optim': tune.grid_search(['sgd', 'adam', 'rmsprop', 'adadelta', 'adagrad']),
+        #'forcelr': 0.01, 'forcemom': 0.7, 'forcenest': True,
+        'ConvCh': [1, 31, 8], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'weight_reg': 1e-6, 'batchnorm': 'None'
+        # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+    }
+    config_sargru_optsched = {
+        'name': 'SAR_GRU-OPTFULL-SCHED',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products, 'attn': attns[2], 'batch_size': 1, #'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
+        # Params to tune
+        'optim': tune.grid_search(['sgd', 'adam', 'rmsprop', 'adadelta']),
+        'forcegamma': tune.grid_search([0.1, 0.5, 0.9]), 'forcestep': tune.grid_search([10, 30, 50]),
+        #'forcelr': 0.01, 'forcemom': 0.7, 'forcenest': True,
         'ConvCh': [1, 31, 8], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
         'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
@@ -171,16 +220,16 @@ def main():
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
-    for config in [config_cnnlstm_opt]:
+    for config in [config_sargru_optsched]:
         #if global_optim == torch.optim.RMSprop:
         #    config['name'] = 'RMSProp-{}'.format(config['name'])
         chkdir = 'Models/Tuning/{}'.format(config['name'])
         if config == config_cnnlstm_ovf:
             smpl = 1
-            gputil = 0.333
+            gputil = 0.5
         else:
-            smpl = 1
-            gputil = 1
+            smpl = 3
+            gputil = 0.5
         if not os.path.isdir(chkdir):
             os.makedirs(chkdir)
         # train_model
@@ -200,7 +249,7 @@ def main():
             name=config['name'],
             mode="min",
             #local_dir='/media/dualboot/New Volume/NathanSchimpf/Tuning',
-            num_samples=5,
+            num_samples=smpl,
             scheduler=fifo_sched
         )
         df = result.results_df
