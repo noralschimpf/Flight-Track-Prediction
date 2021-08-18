@@ -39,10 +39,10 @@ def main():
     max_epochs = 3
     folds = 4
 
-    dev = 'cuda:1'
+    dev = 'cuda:0'
     #dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
-    root_dir = 'data/'  # TEST DATA
+    root_dir = '/home/dualboot/Data/Train-2weeks'
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
 
 
@@ -61,8 +61,9 @@ def main():
     #list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
     list_products = [['ECHO_TOP']]; cube_height = 1
     flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
-                   'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60}
-    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins)
+                   'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60, 'KORD_KLGA': 1.5}
+    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins,
+                     fp_subdir='/Flight Plans/Interpolated - OldAlt', ft_subdir='/Flight Tracks/Interpolated')
     total_flights = len(fps)
 
     #cnnlstm = tune.Analysis('~/ray_results/RMSProp-CNN_LSTM-CHDepths')
@@ -186,7 +187,6 @@ def main():
     cfgs = [config_sargru]
     # Correct Models
     for config in cfgs:
-        config['epochs'] = epochs
         config['device'] = dev
         if not 'weight_reg' in config.keys():
             config['weight_reg'] = 0.
@@ -256,7 +256,7 @@ def main():
 
             # train_model
             for config in cfgs:
-                mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=True, const=False, gradclip=True)
+                mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=False, const=False, gradclip=True, scale=True)
                 mdl.epochs_trained = config['epochs']
                 mdl.save_model(override=True)
                 shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))
