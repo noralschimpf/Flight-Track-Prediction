@@ -36,7 +36,6 @@ def main():
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     attns = {0: 'None', 1: 'after', 2: 'replace'}
-    max_epochs = 3
     folds = 4
 
     dev = 'cuda:0'
@@ -72,16 +71,31 @@ def main():
     #saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
     #cfg_lstm = sarlstm.get_best_config(metric='valloss', mode='min')
 
+    config_cnngru_optsched = {
+        'name': 'CNN_GRU-OPTFULL-SCHED',
+        # Pre-defined net params
+        'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, #'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
+        # Params to tune
+        'optim': tune.grid_search(['sgd+nesterov','adam', 'rmsprop']),
+        'forcelr': 0.01, 'forcemom':0.5, 'forcenest': True,
+        'forcegamma': 0.5, 'forcestep':10,
+        'ConvCh': [1, 28, 22], 'HLs': [16],
+        'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 650,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': 30,
+        'weight_reg': 1e-8, 'batchnorm': 'None'
+    }
+
     config_cnnlstm = {
         # Pre-defined net params
         'name': 'CNN_LSTM-TUNED',
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
         'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
-        'optim': '', #'optim': torch.optim.RMSprop,
+        'optim': 'adam', 'forcegamma': .5, 'forcestep': 10, 'forcelr': .01,
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 1000,
-        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 1e-6, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
@@ -91,11 +105,11 @@ def main():
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
         'features': list_products[0], 'attn': attns[2], 'batch_size': 1,
-        'optim': '', #'optim': torch.optim.Adam,
+        'optim': 'adam', 'forcegamma': .5, 'forcestep': 30, 'forcelr': .01,
         # Params to tune
         'ConvCh': [1, 31, 8], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
-        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 1e-6, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
@@ -106,11 +120,11 @@ def main():
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
         'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
          #'optim': torch.optim.RMSprop,
-        'optim': 'rmsprop', 'forcelr': 0.01, 'forcegamma': 0.5, 'forcestep': 10,
+        'optim': 'rmsprop', 'forcegamma': 0.5, 'forcestep': 10, 'forcelr': 0.01,
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 650,
-        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 1e-6, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
@@ -121,15 +135,15 @@ def main():
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
         'features': list_products[0], 'attn': attns[2], 'batch_size': 1,
         #'optim': torch.optim.RMSprop,
-        'optim': 'rmsprop', 'forcelr': 0.01, 'forcegamma': 0.5, 'forcestep': 10,
+        'optim': 'rmsprop', 'forcegamma': 0.5, 'forcestep': 30, 'forcelr': 0.01,
         # Params to tune
         'ConvCh': [1, 31, 8], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 2, 'RNNHidden': 600,
-        'droprate': 1e-3, 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 1e-3, 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 1e-6, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
-    
+
     config_dflt_cnnlstm = {
         # Pre-defined net params
         'name': 'CNN_LSTM-DFLT',
@@ -139,7 +153,7 @@ def main():
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
-        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 0., 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 0., 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
@@ -152,7 +166,7 @@ def main():
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
-        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 0., 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 0., 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
@@ -165,7 +179,7 @@ def main():
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
-        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 0., 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 0., 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
@@ -174,17 +188,17 @@ def main():
         'name': 'SA_GRU-DFLT',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
+        'features': list_products, 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
-        'droprate': 0., 'lr': 2e-4, 'epochs': max_epochs + 1,
+        'droprate': 0., 'lr': 2e-4, 'epochs': 30,
         'weight_reg': 0., 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
-    #cfgs = [config_cnnlstm, config_cnngru, config_sarlstm, config_sargru]
-    cfgs = [config_sargru]
+    # cfgs = [config_cnngru_optsched]
+    cfgs = [config_cnngru, config_cnnlstm, config_sargru, config_sarlstm]
     # Correct Models
     for config in cfgs:
         config['device'] = dev
