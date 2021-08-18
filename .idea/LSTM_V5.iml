@@ -5,6 +5,7 @@
       <excludeFolder url="file://$MODULE_DIR$/data" />
       <excludeFolder url="file://$MODULE_DIR$/Initialized Plots" />
       <excludeFolder url="file://$MODULE_DIR$/Models" />
+      <excludeFolder url="file://$MODULE_DIR$/Output" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.8 (torch_py38)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
