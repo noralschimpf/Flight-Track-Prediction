@@ -59,13 +59,17 @@ class ToTensor(object):
             print("WARNING: object of type " + str(type(sample)) + " not converted")
             return sample
 
-def ValidFiles(root_dir: str, products: List[str], under_min: dict):
-    dates_fp = os.listdir(root_dir + '/Flight Plans')
-    dates_ft = os.listdir(root_dir + '/Flight Tracks')
+def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: str = '', ft_subdir: str = '', wc_subdir: str = ''):
+    if fp_subdir == '': fp_subdir = '/Flight Plans'
+    if ft_subdir == '': ft_subdir = '/Flight Tracks'
+    if wc_subdir == '': wc_subdir = '/Weather Cubes'
+    dates_fp = os.listdir(root_dir + fp_subdir)
+    dates_ft = os.listdir(root_dir + ft_subdir)
 
     dates_wc, wc_to_remove = [], []
-    for grp in os.listdir(root_dir + '/Weather Cubes'):
-        dates_wc.append(os.listdir(root_dir + '/Weather Cubes/' + grp))
+    grpdirs = [x for x in os.listdir(root_dir + wc_subdir) if os.path.isdir(root_dir +wc_subdir + '/' + x) and x in products]
+    for grp in grpdirs:
+        dates_wc.append(os.listdir(root_dir + wc_subdir + '/' + grp))
     for g in range(len(dates_wc)):
         for i in range(len(dates_wc[0])):
             if g != 0 and len(dates_wc) != 1:
@@ -87,16 +91,15 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict):
             common_dates.append(date)
 
     for date in common_dates:
-        fp_dir = root_dir + '/Flight Plans/' + date
-        ft_dir = root_dir + '/Flight Tracks/' + date
-        wc_dir = [root_dir + '/Weather Cubes/' + x + '/' + date for x in os.listdir(root_dir + '/Weather Cubes')]
+        fp_dir = root_dir + fp_subdir + '/' + date
+        ft_dir = root_dir + ft_subdir + '/' + date
+        wc_dir = [root_dir + wc_subdir + '/' + x + '/' + date for x in os.listdir(root_dir + wc_subdir) if x in grpdirs]
         tmp_fp = os.listdir(fp_dir)
         tmp_ft = os.listdir(ft_dir)
         tmp_wc = [os.listdir(x) for x in wc_dir]
 
         for fp in tmp_fp:
-            flight_desc = '_'.join(fp.split('_')[2:])
-            ft = 'Flight_Track_' + flight_desc
+            ft = 'Flight_Track_' + fp.replace('_fp','')
             wc = fp.replace('.txt', '.nc')
             try:
                 fp_idx = tmp_fp.index(fp)
@@ -108,7 +111,7 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict):
 
             # Unusables: missing flight plan, flight track, or weather cube file
             except ValueError:
-                unusable.append('/'.join([date, flight_desc]))
+                unusable.append('/'.join([date, fp]))
     print("{} Available Flights, {}  incompatible".format(len(flight_plan), len(unusable)))
 
     list_underMin = []
