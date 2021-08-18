@@ -9,7 +9,8 @@ from libmodels.model import load_model, init_constant
 from ray import tune
 
 def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
-        raytune: bool = False, determinist: bool = True, const: bool = False, gradclip: bool = False, model_name: str = 'Default'):
+        raytune: bool = False, determinist: bool = True, const: bool = False, gradclip: bool = False, model_name: str = 'Default',
+        scale: bool = False):
     #print(config['mdldir'])
 
     if determinist:
@@ -97,6 +98,20 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 wc = wc.cuda(device=mdl.device, non_blocking=True)
             else:
                 fp, ft = fp[:, :, :], ft[:, :, :]
+            if scale:
+                # scale lats 24 - 50 -> 0-1
+                fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
+                ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
+
+                # scale lons -126 - -66-> 0-1
+                fp[:, :, 1] = (fp[:, :, 1] + 66.) / (-126. + 66.)
+                ft[:, :, 1] = (ft[:, :, 1] + 66.) / (-126. + 66.)
+
+                # scale alts/ETs -1000 - 64000 -> 0-1
+                fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
+                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
+                wc = (wc + 1000.) / (64000. + 1000.)
+
             if mdl.paradigm == 'Regression':
                 print("\nFlight {}/{}: ".format(batch_idx + 1, len(train_dl)) + str(len(fp)) + " points")
                 for pt in tqdm.trange(len(wc)):
@@ -154,6 +169,20 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 wc = wc.cuda(device=mdl.device, non_blocking=True)
             else:
                 fp, ft = fp[:, :, :], ft[:, :, :]
+
+            if scale:
+                # scale lats 24 - 50 -> 0-1
+                fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
+                ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
+
+                # scale lons -126 - -66-> 0-1
+                fp[:, :, 1] = (fp[:, :, 1] + 66.) / (-126. + 66.)
+                ft[:, :, 1] = (ft[:, :, 1] + 66.) / (-126. + 66.)
+
+                # scale alts/ETs -1000 - 64000 -> 0-1
+                fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
+                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
+                wc = (wc + 1000.) / (64000. + 1000.)
 
             if mdl.paradigm == 'Seq2Seq':
                 mdl.optimizer.zero_grad()
