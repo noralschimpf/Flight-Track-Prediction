@@ -62,7 +62,7 @@ def main():
     flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
                    'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60, 'KORD_KLGA': 1.5}
     fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins,
-                     fp_subdir='/Flight Plans/Interpolated - OldAlt', ft_subdir='/Flight Tracks/Interpolated')
+                     fp_subdir='/Flight Plans/Sorted-interp', ft_subdir='/Flight Tracks/Interpolated')
     total_flights = len(fps)
 
     #cnnlstm = tune.Analysis('~/ray_results/RMSProp-CNN_LSTM-CHDepths')
@@ -75,7 +75,7 @@ def main():
         'name': 'CNN_GRU-OPTFULL-SCHED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, #'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
+        'features': list_products[0], 'attn': attns[0], 'batch_size': bs, #'optim': tune.grid_search([torch.optim.Adam,torch.optim.RMSprop]),
         # Params to tune
         'optim': tune.grid_search(['sgd+nesterov','adam', 'rmsprop']),
         'forcelr': 0.01, 'forcemom':0.5, 'forcenest': True,
@@ -90,7 +90,7 @@ def main():
         # Pre-defined net params
         'name': 'CNN_LSTM-TUNED',
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': bs,
         'optim': 'adam', 'forcegamma': .5, 'forcestep': 10, 'forcelr': .01,
         # Params to tune
         'ConvCh': [1, 28, 22], 'HLs': [16],
@@ -104,7 +104,7 @@ def main():
         'name': 'SA_LSTM-TUNED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products[0], 'attn': attns[2], 'batch_size': 1,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': bs,
         'optim': 'adam', 'forcegamma': .5, 'forcestep': 30, 'forcelr': .01,
         # Params to tune
         'ConvCh': [1, 31, 8], 'HLs': [16],
@@ -118,7 +118,7 @@ def main():
         'name': 'CNN_GRU-TUNED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': bs,
          #'optim': torch.optim.RMSprop,
         'optim': 'rmsprop', 'forcegamma': 0.5, 'forcestep': 10, 'forcelr': 0.01,
         # Params to tune
@@ -133,7 +133,7 @@ def main():
         'name': 'SA_GRU-TUNED',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products[0], 'attn': attns[2], 'batch_size': 1,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': bs,
         #'optim': torch.optim.RMSprop,
         'optim': 'rmsprop', 'forcegamma': 0.5, 'forcestep': 30, 'forcelr': 0.01,
         # Params to tune
@@ -148,7 +148,7 @@ def main():
         # Pre-defined net params
         'name': 'CNN_LSTM-DFLT',
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': bs,
         'optim': '', #'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
@@ -162,7 +162,7 @@ def main():
         'name': 'SA_LSTM-DFLT',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.LSTM,
-        'features': list_products[0], 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': bs, 'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
@@ -175,7 +175,7 @@ def main():
         'name': 'CNN_GRU-DFLT',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products[0], 'attn': attns[0], 'batch_size': 1, 'optim': torch.optim.Adam,
+        'features': list_products[0], 'attn': attns[0], 'batch_size': bs, 'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
@@ -188,7 +188,7 @@ def main():
         'name': 'SA_GRU-DFLT',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products, 'attn': attns[2], 'batch_size': 1, 'optim': torch.optim.Adam,
+        'features': list_products, 'attn': attns[2], 'batch_size': bs, 'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
@@ -198,7 +198,9 @@ def main():
     }
 
     # cfgs = [config_cnngru_optsched]
-    cfgs = [config_cnngru, config_cnnlstm, config_sargru, config_sarlstm]
+    # cfgs = [config_cnngru, config_cnnlstm, config_sargru, config_sarlstm]
+    cfgs = [config_cnngru, config_cnnlstm, config_sarlstm]
+
     # Correct Models
     for config in cfgs:
         config['device'] = dev
@@ -300,7 +302,7 @@ def main():
 
                 shutil.copy('test_flight_samples.txt', 'Models/{}/{}/{}/test_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
                 shutil.copy('train_flight_samples.txt', 'Models/{}/{}/{}/train_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
-                shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr))
+                shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr)
 
 
 if __name__ == '__main__':

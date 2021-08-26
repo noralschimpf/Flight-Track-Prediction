@@ -31,7 +31,7 @@ def main():
     flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
                    'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60, 'KORD_KLGA': 1.5}
     fps_test, fts_test, wcs_test, dates, _ = ValidFiles(root_testdir, list_products, under_min=flight_mins,
-                     fp_subdir='/Flight Plans/Interpolated - OldAlt', ft_subdir='/Flight Tracks/Interpolated')
+                     fp_subdir='/Flight Plans/Sorted-interp', ft_subdir='/Flight Tracks/Interpolated')
     test_dataset = CustomDataset(root_testdir, fps_test, fts_test, wcs_test, list_products, ToTensor(), device='cpu')
     test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
                          shuffle=False, drop_last=True)
@@ -92,8 +92,8 @@ def main():
                             ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
 
                             # scale lons -126 - -66-> 0-1
-                            fp[:, :, 1] = (fp[:, :, 1] + 66.) / (-126. + 66.)
-                            ft[:, :, 1] = (ft[:, :, 1] + 66.) / (-126. + 66.)
+                            fp[:, :, 1] = (fp[:, :, 1] + 126.) / (-66. + 126.)
+                            ft[:, :, 1] = (ft[:, :, 1] + 126.) / (-66. + 126.)
 
                             # scale alts/ETs -1000 - 64000 -> 0-1
                             fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
