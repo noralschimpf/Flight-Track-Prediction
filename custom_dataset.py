@@ -158,7 +158,7 @@ def pad_batch(batch):
     #expand CIWS wc's to fit cube shapes
     # Fit to Cube height WARNING HEIGH MUST BE ODD
     heights = [x.shape[2] for x in wc]
-    maxcenter = (max(heights)-1)/2
+    maxcenter = int((max(heights)-1)/2)
     if not max(heights) == min(heights):
         wc = [x if x.shape[2]== max(heights) else torch.cat((torch.repeat_interleave(torch.zeros_like(x), maxcenter, dim=2),
                          x,torch.repeat_interleave(torch.zeros_like(x),maxcenter,dim=2)), 2) for x in wc]

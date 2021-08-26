@@ -80,7 +80,7 @@ def main():
     alt_scaler.fit(nda_minmax[2,:].reshape(-1,1))
 
 
-    # Scale every Flight Plan
+    '''# Scale every Flight Plan
     fp_dates = [x for x in os.listdir(PATH_FP) if os.path.isdir(os.path.join(PATH_FP, x))]
     for dir in tqdm.tqdm(fp_dates, desc='scaling flight plans'):
         files = [y for y in os.listdir(os.path.join(PATH_FP, dir)) if y.__contains__('.txt')]
@@ -105,7 +105,7 @@ def main():
                 nda_tp[:,1] = lat_scaler.transform(nda_tp[:,1].reshape(-1,1)).reshape(-1)
                 nda_tp[:,2] = lon_scaler.transform(nda_tp[:,2].reshape(-1,1)).reshape(-1)
                 nda_tp[:,3] = alt_scaler.transform(nda_tp[:,3].reshape(-1,1)).reshape(-1)
-            np.savetxt(tp_abspath, nda_tp, delimiter=',', newline='\n')
+            np.savetxt(tp_abspath, nda_tp, delimiter=',', newline='\n')'''
 
 
     # Scale every Weather Cube
