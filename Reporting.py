@@ -181,11 +181,11 @@ for mdl in mdl_dirs:
         pred_matve, fp_matve = np.mean(np.abs(tve_preds)), np.mean(np.abs(tve_fps))
         pred_stdtve, fp_stdtve = np.std(tve_preds), np.std(tve_fps)
 
-        print('\u03BC Horiz (nmi)\t\u03BC Vert (m)\t\u03C3 Horiz (nmi)\t\u03C3 Vert (m)')
-        print('FP PW{:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(fp_maphe, fp_mapve, fp_stdphe, fp_stdpve))
-        print('PRED PW{:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(pred_maphe, pred_mapve, pred_stdphe, pred_stdpve))
-        print('FP TW{:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(fp_mathe, fp_matve, fp_stdthe, fp_stdtve))
-        print('PRED TW{:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(pred_mathe, pred_matve, pred_stdthe, pred_stdtve))
+        print('        \u03BC Horiz (nmi)\t\u03BC Vert (m)\t\u03C3 Horiz (nmi)\t\u03C3 Vert (m)')
+        print('FP PW   {:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(fp_maphe, fp_mapve, fp_stdphe, fp_stdpve))
+        print('PRED PW {:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(pred_maphe, pred_mapve, pred_stdphe, pred_stdpve))
+        print('FP TW   {:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(fp_mathe, fp_matve, fp_stdthe, fp_stdtve))
+        print('PRED TW {:.5f}\t{:.5f}\t{:.5f}\t{:.5f}'.format(pred_mathe, pred_matve, pred_stdthe, pred_stdtve))
         d = {'model': mdl.split('/')[-1], 'products': mdl.split('/')[-2], 'fp_maphe': fp_maphe, 'fp_mapve': fp_mapve, 'fp_stdphe': fp_stdphe, 'fp_stdpve': fp_stdpve,
              'pred_maphe': pred_maphe, 'pred_mapve': pred_mapve, 'pred_stdphe': pred_stdphe, 'pred_stdpve': pred_stdpve,
              'fp_mathe': fp_mathe, 'fp_matve': fp_matve, 'fp_stdthe': fp_stdthe, 'fp_stdtve': fp_stdtve,
