@@ -5,10 +5,12 @@ import pandas as pd
 import warnings
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList
 from custom_dataset import ToTensor
+from attn_dataset import ATTNDataset
 from libmodels.CONV_RECURRENT import CONV_RECURRENT
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from fit import fit
+from fit_attn import fit as fit_attn
 from functools import partial
 import ray
 from ray import tune
@@ -30,16 +32,18 @@ def main():
     dev = 'cuda:0'
     # dev = 'cpu'
     # root_dir = '/media/lab/Local Libraries/TorchDir'
-    root_dir = 'data/'  # TEST DATA
+    root_dir = '/home/dualboot/Data/Train-2weeks'  # TEST DATA
     # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
     # Uncomment block if generating valid file & split files
     total_products = ['ECHO_TOP', 'VIL', 'uwind', 'vwind', 'tmp']
     list_products = ['ECHO_TOP']
     cube_height = 1
 
-    flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
-                   'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60}
-    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins)
+    flight_mins = {'KJFK_KLAX': 5 * 60, 'KIAH_KBOS': 3.5 * 60, 'KATL_KORD': 1.5 * 60,
+                   'KATL_KMCO': 1.25 * 60, 'KSEA_KDEN': 2.25 * 60, 'KORD_KLGA': 1.5}
+    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins,
+                                         fp_subdir='/Flight Plans/Sorted-interp',
+                                         ft_subdir='/Flight Tracks/Interpolated')
     total_flights = len(fps)
 
     # Random split
@@ -84,12 +88,12 @@ def main():
     # wcs_test = [[x.split('\'')[1]] for x in wcs_test]
 
 
-    train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, list_products, ToTensor(), device='cpu')
-    test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, list_products, ToTensor(), device='cpu')
+    train_dataset = ATTNDataset(root_dir, fps_train, fts_train, wcs_train, list_products, ToTensor(), device='cpu')
+    test_dataset = ATTNDataset(root_dir, fps_test, fts_test, wcs_test, list_products, ToTensor(), device='cpu')
 
     ## MODEL PARAMETERS
     # Ray search space
-    ray.init(num_gpus=2, _temp_dir='/media/dualboot/New Volume/NathanSchimpf/tmp')
+    ray.init(_temp_dir='/media/dualboot/New Volume/NathanSchimpf/tmp')
     global_optim = torch.optim.RMSprop
     config_cnnlstm_opt = {
         # Pre-defined net params
@@ -219,8 +223,15 @@ def main():
         'weight_reg': 1e-6, 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
-
-    for config in [config_sargru_optsched]:
+    config_attn_optsched = {'name': 'ATTN-CONSTINIT', 'device': 'cuda:0', 'cube_height': 1, 'features': list_products[0],
+                        'paradigm': paradigms[1], 'loss_function': torch.nn.MSELoss,
+                        # adjustable hyperparams
+                        'optim':tune.grid_search(['rmsprop','adam']), 'batch_size': 1, 'epochs': 300, 'weight_reg': 0.,
+                        'forcegamma': .5, 'forcestep': 30, 'forcelr': .01,
+                        # 'latlon_wb': {'w_q': 1.,'w_k': 1., 'w_v': 1., 'b_q': 0., 'b_k': -1., 'b_v': 0.},
+                        # 'alt_wb': {'w_q': 1.,'w_k': 1., 'w_v': 1., 'b_q': 0., 'b_k': 0., 'b_v': 0.}
+                            }
+    for config in [config_attn_optsched]:
         #if global_optim == torch.optim.RMSprop:
         #    config['name'] = 'RMSProp-{}'.format(config['name'])
         chkdir = 'Models/Tuning/{}'.format(config['name'])
@@ -229,7 +240,7 @@ def main():
             gputil = 0.5
         else:
             smpl = 3
-            gputil = 0.5
+            gputil = 0.2
         if not os.path.isdir(chkdir):
             os.makedirs(chkdir)
         # train_model
@@ -241,8 +252,8 @@ def main():
         # scheduler = sch.ASHAScheduler(max_t=max_epochs, grace_period=1, reduction_factor=2)
         fifo_sched = sch.FIFOScheduler()
         result = tune.run(
-            tune.with_parameters(fit, train_dataset=train_dataset, test_dataset=test_dataset, raytune=True,
-                                 determinist=False, const=False),
+            tune.with_parameters(fit_attn, train_dataset=train_dataset, test_dataset=test_dataset, raytune=True,
+                                 determinist=False, const=False, scale=True),
             resources_per_trial={"cpu": 4, "gpu": gputil},
             config=config,
             metric="valloss",

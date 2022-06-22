@@ -6,7 +6,7 @@ from netCDF4 import Dataset as DSet
 import pandas as pd
 import numpy as np
 from typing import List
-import os
+import os, logging
 
 
 class CustomDataset(Dataset):
@@ -25,11 +25,19 @@ class CustomDataset(Dataset):
         return len(self.flight_plan)
 
     def __getitem__(self, idx):
-        fp = pd.read_csv(self.flight_plan[idx], usecols=(1, 2, 3)).values
-        ft = pd.read_csv(self.flight_track[idx], usecols=(1, 2, 3)).values
+        logging.basicConfig(filename="Data Validation.log", filemode="a")
+        try: fp = pd.read_csv(self.flight_plan[idx], usecols=(1, 2, 3)).values
+        except FileNotFoundError as e:
+            raise FileNotFoundError(self.flight_plan[idx], '\t', e)
+        try: ft = pd.read_csv(self.flight_track[idx], usecols=(1, 2, 3)).values
+        except FileNotFoundError as e:
+            raise FileNotFoundError(self.flight_track[idx],'\t', e)
         wc = []
         for i in range(len(self.weather_cube[0])):
-            wc.append(DSet(self.weather_cube[idx][i], 'r', format='netCDF4'))
+            try:
+                wc.append(DSet(self.weather_cube[idx][i], 'r', format='netCDF4'))
+            except FileNotFoundError as e:
+                raise FileNotFoundError(self.weather_cube[idx],'\t', e)
 
         if self.transform:
             fp = self.transform(fp, device=self.device)
@@ -60,6 +68,7 @@ class ToTensor(object):
             return sample
 
 def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: str = '', ft_subdir: str = '', wc_subdir: str = ''):
+    logging.basicConfig(filename="Data Validation.log", filemode="w")
     if fp_subdir == '': fp_subdir = '/Flight Plans'
     if ft_subdir == '': ft_subdir = '/Flight Tracks'
     if wc_subdir == '': wc_subdir = '/Weather Cubes'
@@ -89,7 +98,6 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
     for date in dates_fp:
         if date in dates_ft and date in dates_wc:
             common_dates.append(date)
-
     for date in common_dates:
         fp_dir = root_dir + fp_subdir + '/' + date
         ft_dir = root_dir + ft_subdir + '/' + date
@@ -99,7 +107,7 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
         tmp_wc = [os.listdir(x) for x in wc_dir]
 
         for fp in tmp_fp:
-            ft = 'Flight_Track_' + fp.replace('_fp','')
+            ft = fp.replace('_fp','_ft')
             wc = fp.replace('.txt', '.nc')
             try:
                 fp_idx = tmp_fp.index(fp)
@@ -112,6 +120,8 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
             # Unusables: missing flight plan, flight track, or weather cube file
             except ValueError:
                 unusable.append('/'.join([date, fp]))
+                # logging.warning(f'Missing FT or WC for {date}-{fp}')
+
     print("{} Available Flights, {}  incompatible".format(len(flight_plan), len(unusable)))
 
     list_underMin = []
@@ -119,10 +129,20 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
         df_fp = pd.read_csv(flight_plan[i], usecols=(0, 1, 2))
         df_ft = pd.read_csv(flight_track[i], usecols=(0, 1, 2))
         wCubes = [DSet(weather_cube[i][x], 'r', format='netCDF4') for x in range(len(weather_cube[0]))]
-        minlen = [under_min[key] for key in under_min if key in flight_plan[i]][0]
-        if df_fp.shape[0] < minlen or df_ft.shape[0] < minlen or \
+
+        try:
+            key = flight_plan[i].split('/')[-1][:9].replace('_', '-')
+            minlen = under_min[key]
+        except KeyError as e:
+            print(e)
+            exit(13)
+
+        # minlen = [under_min[key] for key in under_min if key in flight_plan[i]][0]
+        if len(df_fp) < minlen or len(df_ft) < minlen or \
                 min([wCubes[x][p].shape[0] for x in range(len(wCubes)) for p in products if p in wCubes[x].variables.keys()]) < minlen:
             list_underMin.append(i)
+            fp = flight_plan[i]
+            logging.warning(f'{fp}. {minlen}, {df_fp.shape[0]}, {minlen-df_fp.shape[0]}')
     print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), under_min, list_underMin))
     for i in range(len(list_underMin)):
         flight_desc = flight_plan[list_underMin[i] - i].split('\\')[-2:]
@@ -133,7 +153,6 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
         flight_track.pop(list_underMin[i] - i)
         weather_cube.pop(list_underMin[i] - i)
     print('{} Available flights, {} unusable flights'.format(len(flight_plan), len(unusable)))
-
     return flight_plan, flight_track, weather_cube, common_dates, unusable
 
 def SplitStrList(str_list: str, test_idx: int):

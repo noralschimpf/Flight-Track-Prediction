@@ -29,9 +29,9 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 	    #torch.backends.cudnn.enabled = False
 	    torch.use_deterministic_algorithms(True)
 
-    train_dl = torch.utils.data.DataLoader(train_dataset, collate_fn=pad_batch, batch_size=config['batch_size'], num_workers=0, pin_memory=True,
+    train_dl = torch.utils.data.DataLoader(train_dataset, collate_fn=pad_batch, batch_size=config['batch_size'], num_workers=8, pin_memory=True,
                           shuffle=False, drop_last=True)
-    test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
+    test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=8, pin_memory=True,
                          shuffle=False, drop_last=True)
 
     mdl = CONV_RECURRENT(paradigm=config['paradigm'], cube_height=config['cube_height'], device=config['device'],
