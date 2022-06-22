@@ -134,7 +134,7 @@ class CONV_RECURRENT(nn.Module):
             self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
 
         if self.device.__contains__('cuda'):
-            self.cuda()
+            self.cuda(self.device.split(':')[1])
             self.device = '{}:{}'.format(self.fc[0].bias.device.type, self.fc[0].bias.device.index)
 
         if not issubclass(optim, torch.optim.Optimizer):
