@@ -13,18 +13,21 @@ from mpl_toolkits.basemap import Basemap
 from mpl_toolkits import mplot3d
 import Utils.ErrorFn as fn
 
+plotting = False
+
 # Plots: Trajectories v. Known, MSE of each Flight in Test Data
 valid_products = ['ECHO_TOP','VIL','tmp','uwind','vwind']
 mdl_product_dirs = [os.path.join(os.path.abspath('.'), 'Models/{}'.format(x)) for x in os.listdir('Models') if
                         os.path.isdir('Models/{}'.format(x)) and any([y in x for y in valid_products])]
-mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS300' in y]
+mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS500' in y]
+mdl_dirs= [x for x in mdl_dirs if not len(os.listdir(x)) == sum([1 for y in os.listdir(x) if 'IGNORE' in y])]
 mdls = [x for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCH' in x]
 df_val_summary, df_test_summary = pd.DataFrame(), pd.DataFrame()
 for mdl in mdl_dirs:
     print(mdl)
     outdir = mdl.replace('Models','Output')
     if not os.path.isdir('{}/Figs'.format(outdir)):
-        os.mkdir('{}/Figs'.format(outdir))
+        os.makedirs('{}/Figs'.format(outdir))
 
 
     df_flight_losses = pd.read_csv('{}/total flight losses.txt'.format(mdl))
@@ -41,7 +44,7 @@ for mdl in mdl_dirs:
         phe_nmi_preds, pve_preds = [], []
         the_nmi_fps, the_m_fps, tve_fps = np.zeros(len(files)), np.zeros(len(files)), np.zeros(len(files))
         phe_nmi_fps, pve_fps = [], []
-
+        if len(files)==0: continue
         for f in tqdm.trange(len(files)):
             # query df for normalized loss
             start_idx = 5 if files == evals else 8
@@ -51,6 +54,7 @@ for mdl in mdl_dirs:
                 df_flight = pd.read_csv('{}/Denormed/{}'.format(outdir, files[f]))
                 nda_fp = df_flight[['flight plan LAT', 'flight plan LON', 'flight plan ALT']].values
                 nda_pred = df_flight[['predicted LAT', 'predicted LON', 'predicted ALT']].values
+                if np.isnan(nda_pred).any(): continue
                 nda_act =  df_flight[['actual LAT', 'actual LON', 'actual ALT']].values
                 '''
                 a = torch.tensor(nda_fp).view(-1,2)
@@ -74,7 +78,7 @@ for mdl in mdl_dirs:
 
                 # plot trajectory v flight plan v actual, include mse, reduction in title and norms in legend
 
-                if f%10 == 0:
+                if f%10 == 0 and plotting:
                     reduction_2d = fn.reduction(l2_fps_2d[f], l2_preds_2d[f])
                     reduction_3d = fn.reduction(l2_fps_3d[f], l2_preds_3d[f])
                     m = Basemap(width=6000000, height=4000000,

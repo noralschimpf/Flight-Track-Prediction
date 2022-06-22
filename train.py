@@ -7,6 +7,7 @@ import warnings
 import tqdm
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
+from attn_dataset import ATTNDataset, pad_batch as attn_pad
 from custom_dataset import ToTensor
 from libmodels.CONV_RECURRENT import CONV_RECURRENT
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
@@ -14,8 +15,10 @@ from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent a
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from torch.utils.data import DataLoader
 from fit import fit
+from fit_attn import fit as ATTNfit
 from ray import tune
 from Utils.Misc import str_to_list
+from global_vars import flight_mins, flight_min_tol
 
 
 '''TRAINING CONFIGS
@@ -32,17 +35,15 @@ def main():
         torch.multiprocessing.set_start_method('spawn')
 
     # training params
-    epochs = 300
+    epochs = 500
     bs = 1
     paradigms = {0: 'Regression', 1: 'Seq2Seq'}
     attns = {0: 'None', 1: 'after', 2: 'replace'}
-    folds = 4
+    folds = 1
 
     dev = 'cuda:0'
     #dev = 'cpu'
-    # root_dir = '/media/lab/Local Libraries/TorchDir'
-    root_dir = '/home/dualboot/Data/Train-2weeks'
-    # root_dir = 'D:/NathanSchimpf/Aircraft-Data/TorchDir'
+    root_dir = '/home/dualboot/Data/Train'
 
 
     ## MODEL PARAMETERS
@@ -59,9 +60,9 @@ def main():
     total_products=['ECHO_TOP','VIL','uwind','vwind','tmp']
     #list_products=[['ECHO_TOP'], ['VIL'],['tmp'],['vwind'],['uwind']]
     list_products = [['ECHO_TOP']]; cube_height = 1
-    flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
-                   'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60, 'KORD_KLGA': 1.5}
-    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_mins,
+    # flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
+    #                'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60, 'KORD_KLGA': 1.5}
+    fps, fts, wcs, dates, _ = ValidFiles(root_dir, total_products, under_min=flight_min_tol,
                      fp_subdir='/Flight Plans/Sorted-interp', ft_subdir='/Flight Tracks/Interpolated')
     total_flights = len(fps)
 
@@ -188,19 +189,28 @@ def main():
         'name': 'SA_GRU-DFLT',
         # Pre-defined net params
         'paradigm': paradigms[1], 'cube_height': cube_height, 'device': dev, 'rnn': torch.nn.GRU,
-        'features': list_products, 'attn': attns[2], 'batch_size': bs, 'optim': torch.optim.Adam,
+        'features': list_products[0], 'attn': attns[2], 'batch_size': bs, 'optim': torch.optim.Adam,
         # Params to tune
         'ConvCh': [1, 2, 4], 'HLs': [16],
         'RNNIn': 6, 'RNNDepth': 1, 'RNNHidden': 100,
-        'droprate': 0., 'lr': 2e-4, 'epochs': 30,
+        'droprate': 0., 'lr': 2e-4, 'epochs': epochs,
         'weight_reg': 0., 'batchnorm': 'None'
         # 'optim': tune.choice([torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
     }
 
+    config_attn_init = {'name': 'ATTN-CONSTINIT', 'device': 'cuda:0', 'cube_height': 1, 'features': list_products[0],
+                        'paradigm': paradigms[1], 'loss_function': torch.nn.MSELoss,
+                        # adjustable hyperparams
+                        'optim':'rmsprop', 'batch_size': bs, 'epochs': epochs,
+                        'forcegamma': .5, 'forcestep': 30, 'forcelr': .01,
+                        'latlon_wb': {'w_q': 1.,'w_k': 1., 'w_v': 1., 'b_q': 0., 'b_k': -1., 'b_v': 0.},
+                        'alt_wb': {'w_q': 1.,'w_k': 1., 'w_v': 1., 'b_q': 0., 'b_k': 0., 'b_v': 0.}}
+
     # cfgs = [config_cnngru_optsched]
     # cfgs = [config_cnngru, config_cnnlstm, config_sargru, config_sarlstm]
-    cfgs = [config_cnngru, config_cnnlstm, config_sarlstm]
-
+    #cfgs = [config_cnngru, config_cnnlstm, config_sarlstm]
+    # cfgs = [config_attn_init]
+    cfgs = [config_dflt_cnnlstm, config_cnnlstm]
     # Correct Models
     for config in cfgs:
         config['device'] = dev
@@ -240,6 +250,10 @@ def main():
             train_flights.sort()
             test_flights.sort()
 
+            if folds == 1:
+                train_flights = list(range(total_flights))
+                test_flights = []
+
             fps_train, fps_test = SplitStrList(fps, test_flights)
             fts_train, fts_test = SplitStrList(fts, test_flights)
             wcs_train, wcs_test = SplitStrList(wcs, test_flights)
@@ -267,6 +281,7 @@ def main():
             # wcs_test, test_flights = df_testfiles['weather cubes'].values, list(range(len(fps_test)))
             # foldstr = 'fold1-0'
 
+            train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, products, ToTensor(), device='cpu')
             train_dataset = CustomDataset(root_dir, fps_train, fts_train, wcs_train, products, ToTensor(), device='cpu')
             test_dataset = CustomDataset(root_dir, fps_test, fts_test, wcs_test, products, ToTensor(), device='cpu')
 
