@@ -6,16 +6,19 @@ from libmodels import model
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from custom_dataset import CustomDataset, ToTensor, pad_batch, ValidFiles
+from global_vars import flight_mins, flight_min_tol
+import logging
 
 def main():
+    logging.basicConfig(filemode='w', filename='Evaluation.log')
     scale = True
     torch.multiprocessing.set_start_method('spawn')
     # Load model and specified set of test flights
     # For each Model
     #       Collect Predicted and Actual Trajectory into flight-specific CSV
     #       Store loss (MSE, rmse,mae, mape) in general evaluation CSV
-    root_testdir = '/home/dualboot/Data/Test-2weeks'
-    root_valdir = '/home/dualboot/Data/Train-2weeks'
+    root_testdir = '/home/dualboot/Data/Test'
+    root_valdir = '/home/dualboot/Data/Train'
     output = 'Output/'
     dev = 'cuda:0'
 
@@ -28,9 +31,9 @@ def main():
 
     # Generate Test Data
     list_products = ['ECHO_TOP']; cube_height = 1
-    flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
-                   'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60, 'KORD_KLGA': 1.5}
-    fps_test, fts_test, wcs_test, dates, _ = ValidFiles(root_testdir, list_products, under_min=flight_mins,
+    #flight_mins = {'KJFK_KLAX': 5*60, 'KIAH_KBOS': 3.5*60, 'KATL_KORD': 1.5*60,
+     #              'KATL_KMCO': 1.25*60, 'KSEA_KDEN': 2.25*60, 'KORD_KLGA': 1.5}
+    fps_test, fts_test, wcs_test, dates, _ = ValidFiles(root_testdir, list_products, under_min=flight_min_tol,
                      fp_subdir='/Flight Plans/Sorted-interp', ft_subdir='/Flight Tracks/Interpolated')
     test_dataset = CustomDataset(root_testdir, fps_test, fts_test, wcs_test, list_products, ToTensor(), device='cpu')
     test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
@@ -79,52 +82,56 @@ def main():
                         df = df_test
                         dset = test_dataset
                     flight_losses = torch.zeros(len(dl), device=mdl.device)
-                    for idx, (fp, ft, wc) in enumerate(tqdm.tqdm(dl, desc='eval flights', leave=False, position=0)):
-                        if mdl.device.__contains__('cuda'):
-                            fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                            ft = ft[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                            wc = wc.cuda(device=mdl.device, non_blocking=True)
-                        else:
-                            fp, ft = fp[:,:,:], ft[:,:,:]
-                        if scale:
-                            # scale lats 24 - 50 -> 0-1
-                            fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
-                            ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
+                    try:
+                        for idx, (fp, ft, wc) in enumerate(tqdm.tqdm(dl, desc='eval flights', leave=False, position=0)):
 
-                            # scale lons -126 - -66-> 0-1
-                            fp[:, :, 1] = (fp[:, :, 1] + 126.) / (-66. + 126.)
-                            ft[:, :, 1] = (ft[:, :, 1] + 126.) / (-66. + 126.)
+                            if mdl.device.__contains__('cuda'):
+                                fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
+                                ft = ft[:, :, :].cuda(device=mdl.device, non_blocking=True)
+                                wc = wc.cuda(device=mdl.device, non_blocking=True)
+                            else:
+                                fp, ft = fp[:,:,:], ft[:,:,:]
+                            if scale:
+                                # scale lats 24 - 50 -> 0-1
+                                fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
+                                ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
 
-                            # scale alts/ETs -1000 - 64000 -> 0-1
-                            fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
-                            ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
-                            wc = (wc + 1000.) / (64000. + 1000.)
+                                # scale lons -126 - -66-> 0-1
+                                fp[:, :, 1] = (fp[:, :, 1] + 126.) / (-66. + 126.)
+                                ft[:, :, 1] = (ft[:, :, 1] + 126.) / (-66. + 126.)
 
-                        mdl.optimizer.zero_grad()
+                                # scale alts/ETs -1000 - 64000 -> 0-1
+                                fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
+                                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
+                                wc = (wc + 1000.) / (64000. + 1000.)
 
-                        lat, lon, alt = fp[0, :, 0], fp[0, :, 1], fp[0, :, 2]
-                        coordlen = int(mdl.rnn_hidden / 3)
-                        padlen = mdl.rnn_hidden - 3 * coordlen
-                        tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, val_dl.batch_size),
-                                                   lon.repeat(coordlen).view(-1, val_dl.batch_size),
-                                                   alt.repeat(coordlen).view(-1, val_dl.batch_size),
-                                                   torch.zeros(padlen, len(lat),
-                                                           device=mdl.device))).T.view(1, -1, mdl.rnn_hidden)
-                        mdl.init_hidden_cell(tns_coords)
+                            mdl.optimizer.zero_grad()
 
-                        y_pred = mdl(wc, fp)
-                        flight_losses[idx] = mdl.loss_function(y_pred, ft)
+                            lat, lon, alt = fp[0, :, 0], fp[0, :, 1], fp[0, :, 2]
+                            coordlen = int(mdl.rnn_hidden / 3)
+                            padlen = mdl.rnn_hidden - 3 * coordlen
+                            tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, val_dl.batch_size),
+                                                       lon.repeat(coordlen).view(-1, val_dl.batch_size),
+                                                       alt.repeat(coordlen).view(-1, val_dl.batch_size),
+                                                       torch.zeros(padlen, len(lat),
+                                                               device=mdl.device))).T.view(1, -1, mdl.rnn_hidden)
+                            mdl.init_hidden_cell(tns_coords)
 
-                        if mdl.device.__contains__('cuda'):
-                            y_pred, fp, ft = y_pred.cpu(), fp.cpu(), ft.cpu()
-                        y_pred, fp, ft = y_pred.detach().numpy(), fp.detach().numpy(), ft.detach().numpy()
+                            y_pred = mdl(wc, fp)
+                            flight_losses[idx] = mdl.loss_function(y_pred, ft)
 
-                        df_flight = pd.DataFrame(data=
-                                         {'flight plan LAT': fp[:,0, 0], 'flight plan LON': fp[:,0, 1], 'flight plan ALT': fp[:,0,2],
-                                           'prediction LAT': y_pred[:,0, 0], 'prediction LON': y_pred[:,0, 1], 'pretion ALT': y_pred[:,0,2],
-                                           'actual LAT': ft[:,0, 0], 'actual LON': ft[:,0, 1], 'actual ALT': ft[:,0,2]})
-                        df_flight.to_csv('Output/{}/{}/{} {}'.format(prdstr, mdlname, 'eval' if dl == val_dl else 'test{}'.format(fold[-3:]),
-                                                                     '_'.join(df['flight plans'][idx].split('/')[-2:])))
+                            if mdl.device.__contains__('cuda'):
+                                y_pred, fp, ft = y_pred.cpu(), fp.cpu(), ft.cpu()
+                            y_pred, fp, ft = y_pred.detach().numpy(), fp.detach().numpy(), ft.detach().numpy()
+
+                            df_flight = pd.DataFrame(data=
+                                             {'flight plan LAT': fp[:,0, 0], 'flight plan LON': fp[:,0, 1], 'flight plan ALT': fp[:,0,2],
+                                               'prediction LAT': y_pred[:,0, 0], 'prediction LON': y_pred[:,0, 1], 'prediction ALT': y_pred[:,0,2],
+                                               'actual LAT': ft[:,0, 0], 'actual LON': ft[:,0, 1], 'actual ALT': ft[:,0,2]})
+                            df_flight.to_csv('Output/{}/{}/{} {}'.format(prdstr, mdlname, 'eval' if dl == val_dl else 'test{}'.format(fold[-3:]),
+                                                                         '_'.join(df['flight plans'][idx].split('/')[-2:])))
+                    except FileNotFoundError as e:
+                        logging.warning(e)
 
                     if mdl.device.__contains__('cuda'):
                         flight_losses = flight_losses.cpu()
