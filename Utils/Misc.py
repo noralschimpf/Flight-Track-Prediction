@@ -70,6 +70,6 @@ def parseConfig(cfg: dict):
                 elif split[2] == 'SGD': newcfg[key] = optim.SGD
                 else: raise Exception('No optimizer specified')
 
-     return newcfg
+    return newcfg
 
 

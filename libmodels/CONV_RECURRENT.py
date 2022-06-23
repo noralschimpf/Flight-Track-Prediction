@@ -1,9 +1,9 @@
 import torch, torch.nn as nn, torch.nn.functional as F
 import os, inspect
 
-from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+# from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
-from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
+# from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
 
 # customized Convolution and LSTM model
@@ -85,19 +85,19 @@ class CONV_RECURRENT(nn.Module):
         # IndRNN model
         self.rnns = nn.ModuleList()
 
-        for i in range(self.rnn_layers):
-            if i == 0:
-                lstm_insize = self.rnn_input
-                self.rnns.append(torch.nn.Dropout(self.droprate))
-            else: lstm_insize = self.rnn_hidden
-
-            if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn: self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
-            elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
-                self.rnns.append(self.rnn_type(input_size=lstm_insize, hidden_size=self.rnn_hidden))
-            #if self.bn: self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
-            if self.bn: self.rnns.append(torch.nn.BatchNorm1d(self.rnn_hidden, affine=self.bn_af))
-            if not i == self.rnn_layers:
-                self.rnns.append(torch.nn.Dropout(self.droprate))
+        # for i in range(self.rnn_layers):
+        #     if i == 0:
+        #         lstm_insize = self.rnn_input
+        #         self.rnns.append(torch.nn.Dropout(self.droprate))
+        #     else: lstm_insize = self.rnn_hidden
+        #
+        #     if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn: self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
+        #     elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
+        #         self.rnns.append(self.rnn_type(input_size=lstm_insize, hidden_size=self.rnn_hidden))
+        #     #if self.bn: self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
+        #     if self.bn: self.rnns.append(torch.nn.BatchNorm1d(self.rnn_hidden, affine=self.bn_af))
+        #     if not i == self.rnn_layers:
+        #         self.rnns.append(torch.nn.Dropout(self.droprate))
 
             # gru/lstm(input_size, hidden_size, num_layers)
             # indrnn(hidden_size)
@@ -254,7 +254,6 @@ class CONV_RECURRENT(nn.Module):
             self.hidden_cell = torch.cat((tns_coords.repeat(self.rnn_layers, 1, 1),))
 
     def update_dict(self):
-        self.
         self.struct_dict = {'class': str(type(self)).split('\'')[1],
                             'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,

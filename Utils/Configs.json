@@ -240,6 +240,6 @@
     "adam": {"lr":  0.001},
     "torch.optim.RMSProp": {"lr":  0.001},
     "adadelta": {"lr":  1.0},
-    "adagrad": {"lr":  0.001},
+    "adagrad": {"lr":  0.001}
   }
  }

@@ -5,10 +5,10 @@ import pandas as pd
 import warnings
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
-from attn_dataset import ATTNDataset, pad_batch as attn_pad
+# from attn_dataset import ATTNDataset, pad_batch as attn_pad
 from custom_dataset import ToTensor
 from fit import fit
-from fit_attn import fit as ATTNfit
+# from fit_attn import fit as ATTNfit
 from Utils.Misc import str_to_list, parseConfig
 from global_vars import flight_mins, flight_min_tol
 import json
