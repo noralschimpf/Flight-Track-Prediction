@@ -7,6 +7,14 @@
   "epochs": 500,
   "bs": 1,
   "folds": 1,
+  "scale": false,
+  "raytune": false,
+  "determinist": true,
+  "const": false,
+  "gradclip": false,
+  "checkpoint_dir": "None",
+
+
   "data":  "generate",
   "split": "xval",
 

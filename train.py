@@ -54,9 +54,11 @@ def main():
 
     # Correct Models
     for cfg in cfgs:
-        cfg['device'] = config['dev']
-        cfg['epochs'] = config['epochs']
-        cfg['batch_size'] = config['bs']
+        for key in cfgs:
+            if not isinstance(cfg[key]): cfg[key] = cfgs[key]
+        # cfg['device'] = config['dev']
+        # cfg['epochs'] = config['epochs']
+        # cfg['batch_size'] = config['bs']
         if not 'weight_reg' in cfg.keys():
             cfg['weight_reg'] = 0.
         '''if isinstance(config['optim'], str):
