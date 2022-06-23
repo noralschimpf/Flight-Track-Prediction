@@ -1,16 +1,17 @@
 {
-  "epochs": 500,
-  "bs": 1,
   "paradigms": {"0": "Regression", "1": "Seq2Seq"},
   "attns": {"0": "None", "1": "after", "2": "replace"},
   "dataopts": ["generate", "read"],
   "splitopts": ["random", "xval", "read"],
+
+  "epochs": 500,
+  "bs": 1,
   "folds": 1,
+  "data":  "generate",
+  "split": "xval",
 
   "dev": "cuda:0",
   "root_dir": "/home/dualboot/Data/Train",
-  "data":  "generate",
-  "split": "xval",
   "train_splitfile": "/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/train_flight_samples.txt",
   "test_splitfile": "/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/test_flight_samples.txt",
 
@@ -24,19 +25,22 @@
       "rnn": "torch.nn.GRU",
       "features": ["ECHO_TOP"],
       "attn": "None",
+
       "optim": "tune.grid_search([\"sgd+nesterov\",\"adam\", \"rmsprop\"])",
+      "lr": 2e-4,
       "forcelr": 0.01,
       "forcemom": 0.5,
       "forcenest": true,
       "forcegamma": 0.5,
       "forcestep": 10,
+
       "ConvCh": [1,28,22],
       "HLs": [16],
       "RNNIn": 6,
       "RNNDepth": 1,
       "RNNHidden": 650,
+
       "droprate": 1e-3,
-      "lr": 2e-4,
       "epochs": 30,
       "weight_reg": 1e-8,
       "batchnorm": "None"

@@ -1,23 +1,15 @@
 import torch
-import os, shutil, gc
+import os, shutil
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import warnings
-import tqdm
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
 from attn_dataset import ATTNDataset, pad_batch as attn_pad
 from custom_dataset import ToTensor
-from libmodels.CONV_RECURRENT import CONV_RECURRENT
-from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
-#from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
-from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
-from torch.utils.data import DataLoader
 from fit import fit
 from fit_attn import fit as ATTNfit
-from ray import tune
-from Utils.Misc import str_to_list
+from Utils.Misc import str_to_list, parseConfig
 from global_vars import flight_mins, flight_min_tol
 import json
 
