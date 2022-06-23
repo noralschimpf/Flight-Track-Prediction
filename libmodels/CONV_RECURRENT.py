@@ -1,20 +1,18 @@
-import torch
-import tqdm
-#from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+import torch, torch.nn as nn, torch.nn.functional as F
+import os, inspect
+
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
-import torch.nn as nn
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-import os
 
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
+        initdict = copy(self.__dict__)
 
+        ################################################################
         # Store Model Configuration as attributes
         for key in config:
             if key == 'ConvCh':
@@ -31,10 +29,12 @@ class CONV_RECURRENT(nn.Module):
         elif config['batchnorm'] == 'learn':
             self.bn = True
             self.bn_af = True
+        self.classname = str(type(self)).split('\'')[1]
+        structdict = copy(self.__dict__)
 
 
+        ################################################################
         # Initialize Model
-
         self.hidden_cell = None
 
         self.convs = nn.ModuleList()
@@ -124,23 +124,32 @@ class CONV_RECURRENT(nn.Module):
         if self.device.__contains__('cuda'):
             self.cuda(self.device.split(':')[1])
             self.device = '{}:{}'.format(self.fc[0].bias.device.type, self.fc[0].bias.device.index)
+            structdict['device'] = self.device
 
-        if not issubclass(config['optim'], torch.optim.Optimizer):
-            optim = type(config['optim'])
 
-        self.optimizer = optim(self.parameters())
-        self.loss_function = config['loss']
+
+        ################################################################
+        # Configure optimizer and optimizer scheduling
+        args, varargs, keywords, defaults = inspect.getargspec(config['optim'].__init__)
+        if 'lr' in args and 'weight_decay' in args:
+            if 'momentum' in args and 'nesterov' in args:
+                self.optimizer = config['optim'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'],
+                                                momentum=config['momentum'],
+                                                nesterov=config['nesterov'])
+            else:
+                self.optimizer = config['optim'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'])
+        self.optim = type(self.optimizer); structdict['optim'] = self.optim
+
+        if 'decay_step' in config and 'decay_gamma' in config:
+            self.sched = torch.optim.lr_scheduler.StepLR(self.optimizer,
+                                                        step_size=config['decay_step'], gamma=config['decay_gamma'])
+
+        self.loss_function = config['loss']; structdict['loss_fn'] = self.loss_function
         self.epochs_trained = 0
 
-        self.struct_dict = {'class': str(type(self)).split('\'')[1],
-                            'device': self.device, 'paradigm': self.paradigm,
-                            'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
-                            'conv_output': self.conv_output, 'attntype': self.attntype,
-                            'dense_hidden': self.dense_hidden, 'features': self.features,
-                            'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
-                            'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
-                            'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
-                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
+        self.struct_dict = {x: structdict[x] for x in (set(structdict) - set(initdict))}
+
+
 
     def forward(self, x_w, x_t):
         # apply convolution first
@@ -245,6 +254,7 @@ class CONV_RECURRENT(nn.Module):
             self.hidden_cell = torch.cat((tns_coords.repeat(self.rnn_layers, 1, 1),))
 
     def update_dict(self):
+        self.
         self.struct_dict = {'class': str(type(self)).split('\'')[1],
                             'device': self.device, 'paradigm': self.paradigm,
                             'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,

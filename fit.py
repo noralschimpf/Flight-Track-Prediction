@@ -1,8 +1,6 @@
 import torch
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import os, shutil, gc, tqdm, json, random
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
+import os, shutil, gc, tqdm, json, random, inspect
 from custom_dataset import pad_batch
 from libmodels.CONV_RECURRENT import CONV_RECURRENT
 from libmodels.model import load_model, init_constant
@@ -33,40 +31,8 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 
     mdl = CONV_RECURRENT(config=config)
     if config["const"]: mdl.apply(init_constant)
-    if config['optim'] == 'sgd':
-        #lr, mom, dec, nest= 0.001, 0.0, config['weight_reg'], False
-        lr, mom, dec, nest = 0.01, 0.7, config['weight_reg'], True
-        if 'forcelr' in config: lr = config['forcelr']
-        if 'forcemom' in config: mom = config['forcemom']
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=lr, weight_decay=dec, momentum=mom, nesterov=nest)
-    elif config['optim'] == 'sgd+momentum':
-        lr, mom, dec, nest = 0.001, 0.0, config['weight_reg'], False
-        if 'forcelr' in config: lr = config['forcelr']
-        if 'forcemom' in config: mom = config['forcemom']
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=1e-5, momentum=0.5, nesterov=False, weight_decay=dec)
-    elif config['optim'] == 'sgd+nesterov':
-        lr, mom, dec, nest = 0.001, 0.0, config['weight_reg'], False
-        if 'forcelr' in config: lr = config['forcelr']
-        if 'forcemom' in config: mom = config['forcemom']
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=lr, momentum=mom, nesterov=True, weight_decay=dec)
-    elif config['optim'] == 'adam':
-        lr=0.001
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    elif config['optim'] == 'rmsprop':
-        lr = 0.001
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.RMSprop(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    elif config['optim'] == 'adadelta':
-        lr = 1.
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.Adadelta(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    elif config['optim'] == 'adagrad':
-        lr = 0.001
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.Adagrad(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    if 'forcestep' in config and 'forcegamma' in config:
-        mdl.sched = torch.optim.lr_scheduler.StepLR(mdl.optimizer, step_size=config['forcestep'],gamma=config['forcegamma'])
+
+
     mdl.update_dict()
 
     if config['checkpoint_dir'] != "None":
