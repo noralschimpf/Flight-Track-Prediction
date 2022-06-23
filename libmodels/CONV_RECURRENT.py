@@ -12,42 +12,30 @@ import os
 
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
-    def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=[16],
-                 rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3, batchnorm='None',
-                 attn='None', batch_size=1, droprate = .2, features: list =  ['ECHO_TOP'],
-                 optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
+    def __init__(self, config: dict):
         super().__init__()
-        # convolution layer for weather feature extraction prior to the RNN
-        self.bn_type = batchnorm
-        if batchnorm == 'None':
+
+        # Store Model Configuration as attributes
+        for key in config:
+            if key == 'ConvCh':
+                self.conv_input = config[key][0]
+                self.conv_hidden = config[key][1]
+                self.conv_output = config[key][2]
+            else: self.key = config[key]
+        if config['batchnorm'] == 'None':
             self.bn = False
             self.bn_af = False
-        elif batchnorm == 'simple':
+        elif config['batchnorm'] == 'simple':
             self.bn = True
             self.bn_af = False
-        elif batchnorm == 'learn':
+        elif config['batchnorm'] == 'learn':
             self.bn = True
             self.bn_af = True
-        self.device = device
-        self.paradigm = paradigm
-        self.attntype = attn
-        self.batch_size = batch_size
-        self.droprate = droprate
-        self.features = features
-        self.cube_height = cube_height
 
-        self.conv_input = conv_input
-        self.conv_hidden = conv_hidden
-        self.conv_output = conv_output
-        self.dense_hidden = dense_hidden
 
-        self.rnn_type = rnn
-        self.rnn_layers = rnn_layers
-        self.rnn_input = rnn_input
-        self.rnn_hidden = rnn_hidden
-        self.rnn_output = rnn_output
+        # Initialize Model
+
         self.hidden_cell = None
-
 
         self.convs = nn.ModuleList()
         for i in range(len(self.features)):
@@ -137,12 +125,12 @@ class CONV_RECURRENT(nn.Module):
             self.cuda(self.device.split(':')[1])
             self.device = '{}:{}'.format(self.fc[0].bias.device.type, self.fc[0].bias.device.index)
 
-        if not issubclass(optim, torch.optim.Optimizer):
-            optim = type(optim)
+        if not issubclass(config['optim'], torch.optim.Optimizer):
+            optim = type(config['optim'])
 
         self.optimizer = optim(self.parameters())
-        self.loss_function = loss
-        self.epochs_trained = eptrained
+        self.loss_function = config['loss']
+        self.epochs_trained = 0
 
         self.struct_dict = {'class': str(type(self)).split('\'')[1],
                             'device': self.device, 'paradigm': self.paradigm,
@@ -155,7 +143,7 @@ class CONV_RECURRENT(nn.Module):
                             'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
 
     def forward(self, x_w, x_t):
-        # convolution apply first
+        # apply convolution first
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)

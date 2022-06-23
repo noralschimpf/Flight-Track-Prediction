@@ -1,5 +1,6 @@
-import json, torch
+import json
 from ray import tune
+from torch import nn, optim
 
 def str_to_list(strlist: str, type):
     tmp = strlist[1:-1].replace(',',' ')
@@ -41,6 +42,34 @@ def parseConfig(cfg: dict):
             elif func == 'grid_search': newcfg[key] = tune.grid_search([args])
             elif func == 'sample_from':
                 raise Exception('custom distributions are not currently supported')
+        elif 'torch.' in cfg[key]:
+            split = cfg[key].split('.')
+            if split[1] == 'nn':
+                if split[2] == 'LSTM': newcfg[key] = nn.LSTM
+                elif split[2] == 'GRU': newcfg[key] = nn.GRU
+                elif split[2] == 'RNN': newcfg[key] = nn.RNN
+
+                elif split[2] == 'L1Loss': newcfg[key] = nn.L1Loss
+                elif split[2] == 'MSELoss': newcfg[key] = nn.MSELoss
+                elif split[2] == 'SmoothL1Loss': newcfg[key] = nn.SmoothL1Loss
+                elif split[2] == 'MSELoss': newcfg[key] = nn.MSELoss
+
+
+            elif split[1] == 'optim':
+                if split[2] == 'Adadelta': newcfg[key] = optim.Adadelta
+                elif split[2] == 'Adam': newcfg[key] = optim.Adam
+                elif split[2] == 'AdamW': newcfg[key] = optim.AdamW
+                elif split[2] == 'SparseAdam': newcfg[key] = optim.SparseAdam
+                elif split[2] == 'Adamax': newcfg[key] = optim.Adamax
+                elif split[2] == 'ASGD': newcfg[key] = optim.ASGD
+                elif split[2] == 'LBFGS': newcfg[key] = optim.LBFGS
+                elif split[2] == 'NAdam': newcfg[key] = optim.NAdam
+                elif split[2] == 'RAdam': newcfg[key] = optim.RAdam
+                elif split[2] == 'RMSProp': newcfg[key] = optim.RMSProp
+                elif split[2] == 'RProp': newcfg[key] = optim.RProp
+                elif split[2] == 'SGD': newcfg[key] = optim.SGD
+                else: raise Exception('No optimizer specified')
+
      return newcfg
 
 

@@ -31,13 +31,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
     test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=8, pin_memory=True,
                          shuffle=False, drop_last=True)
 
-    mdl = CONV_RECURRENT(paradigm=config['paradigm'], cube_height=config['cube_height'], device=config['device'],
-                         rnn=config['rnn'], features=config['features'], rnn_layers=config['RNNDepth'],
-                         attn=config['attn'], batch_size=config['batch_size'],
-                         conv_input=config['ConvCh'][0], conv_hidden=config['ConvCh'][1],
-                         conv_output=config['ConvCh'][2], batchnorm=config['batchnorm'],
-                         dense_hidden=config['HLs'], rnn_input=config['RNNIn'], rnn_hidden=config['RNNHidden'],
-                         rnn_output=3, droprate=config['droprate'])
+    mdl = CONV_RECURRENT(config=config)
     if config["const"]: mdl.apply(init_constant)
     if config['optim'] == 'sgd':
         #lr, mom, dec, nest= 0.001, 0.0, config['weight_reg'], False
