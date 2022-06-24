@@ -1,5 +1,5 @@
 import torch
-import os, shutil, gc
+import os, shutil, gc, logging
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -30,6 +30,7 @@ from global_vars import flight_mins, flight_min_tol
 
 
 def main():
+    logging.basicConfig(filename='logs/Training.log', filemode='w', level=logging.info() )
     warnings.filterwarnings('ignore')
     if os.name == 'nt':
         torch.multiprocessing.set_start_method('spawn')
@@ -287,10 +288,26 @@ def main():
 
             # train_model
             for config in cfgs:
-                mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=False, const=False, gradclip=True, scale=True)
+                # retry fit if diverge
+                retries=3; retry_count=0
+                for i in range(retries):
+                    try: mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=False, const=False,
+                                   gradclip=True, scale=True)
+                    except ValueError as e:
+                        if i < retries:
+                            newlr = config['lr']/10
+                            config['lr'] = newlr
+                            retry_count+=1
+                            logging.warning(e)
+                            logging.info(f'reducing learning rate to {newlr}')
+                        else:
+                            logging.warning(e)
+                            logging.error(f'Cannot converge {mdl.model_name()}')
+                if not retry_count==retries: foldstr = 'IGNORE' + foldstr
+
                 mdl.epochs_trained = config['epochs']
                 mdl.save_model(override=True)
-                shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))
+                shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace(f'EPOCHS{mdl.epochs_trained}', 'EPOCHS0')))
                 #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
                 fold_subdir = os.path.join('Models',prdstr, mdl.model_name(), foldstr)
                 if not os.path.isdir(fold_subdir):

@@ -8,6 +8,32 @@ from libmodels.CONV_RECURRENT import CONV_RECURRENT
 from libmodels.model import load_model, init_constant
 from ray import tune
 
+def store_losses(e_losses, e_test_losses, ):
+    plt.plot(e_losses, label='train data')
+    plt.plot(e_test_losses, label='test data')
+    plt.legend()
+    plt.title('Avg Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Avg Loss (MSE)')
+    plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+    plt.close()
+
+    plt.plot(e_losses[:], label='train data')
+    plt.plot(e_test_losses[:], label='test data')
+    plt.legend()
+    plt.title('Avg Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Avg Loss (MSE)')
+    plt.ylim([0, .01])
+    plt.yticks(np.linspace(0, .01, 11))
+    plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
+    plt.close()
+
+    df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
+    df_eloss.to_csv('model_epoch_losses.txt')
+
+
+
 def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
         raytune: bool = False, determinist: bool = True, const: bool = False, gradclip: bool = False, model_name: str = 'Default',
         scale: bool = False):
@@ -217,8 +243,27 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             plt.close()
             del losses
             gc.collect()
-        if (not raytune) and ep % 50 == 0:
-            mdl.save_model(override=True)
+
+        # stop / re-run model training if model diverges
+        if torch.isnan(epoch_losses[ep]) or torch.isnan(epoch_test_losses[ep]):
+            store_losses(e_losses, e_test_losses)
+            raise ValueError(f'{mdl.model_name()} diverged at {ep} epochs')
+
+        # regular checkpointing
+        if (not raytune) and ep % config['checkpoint_freq_epochs'] == 0 and \
+                torch.isnan(epoch_losses[ep]) and torch.isnan(epoch_test_losses[ep]):
+                mdl.save_model(override=True)
+
+        # Early-stopping
+        if ep>config['stopping_iter_no_change']:
+            ls = epoch_losses if len(test_dataset)==0 else epoch_test_losses
+            epoch_diffs = ls[ep-config['stopping_iter_no_change']] -
+                               ls[ep-config['stopping_iter_no_change']-1]
+            if (-1*epoch_diffs < config['stopping_tol']).all():
+                mdl.save_model(override=True)
+                store_losses(e_losses, e_test_losses)
+                raise OSError(f'{mdl}: Early Stopping. {ep} epochs complete')
+
         if raytune:
             if torch.isnan(epoch_test_losses[ep]): raise ValueError('Epoch Loss is NaN')
             with tune.checkpoint_dir(step=ep) as checkpoint_dir:
@@ -241,27 +286,5 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         epoch_test_losses = epoch_test_losses.cpu()
     e_losses = epoch_losses.detach().numpy()
     e_test_losses = epoch_test_losses.detach().numpy()
-    if not raytune:
-        plt.plot(e_losses, label='train data')
-        plt.plot(e_test_losses, label='test data')
-        plt.legend()
-        plt.title('Avg Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Avg Loss (MSE)')
-        plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
-        plt.close()
-
-        plt.plot(e_losses[:], label='train data')
-        plt.plot(e_test_losses[:], label='test data')
-        plt.legend()
-        plt.title('Avg Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Avg Loss (MSE)')
-        plt.ylim([0, .01])
-        plt.yticks(np.linspace(0, .01, 11))
-        plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
-        plt.close()
-
-        df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
-        df_eloss.to_csv('model_epoch_losses.txt')
-        return mdl
+    if not raytune: store_losses(e_losses, e_test_losses)
+    return mdl
