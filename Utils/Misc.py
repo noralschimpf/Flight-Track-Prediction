@@ -66,7 +66,7 @@ def parseConfig(cfg: dict):
                     elif split[2] == 'LBFGS': newcfg[key] = optim.LBFGS
                     elif split[2] == 'NAdam': newcfg[key] = optim.NAdam
                     elif split[2] == 'RAdam': newcfg[key] = optim.RAdam
-                    elif split[2] == 'RMSProp': newcfg[key] = optim.RMSProp
+                    elif split[2] == 'RMSprop': newcfg[key] = optim.RMSprop
                     elif split[2] == 'RProp': newcfg[key] = optim.RProp
                     elif split[2] == 'SGD': newcfg[key] = optim.SGD
                     else: raise Exception('No optimizer specified')
