@@ -53,14 +53,15 @@ def main():
             config['models']['config_cnnlstm']]
 
     # Correct Models
-    for cfg in cfgs:
-        for key in cfgs:
-            if not isinstance(cfg[key]): cfg[key] = cfgs[key]
+    glb_config = {key: config[key] for key in list(set(config.keys()) - set(['models']))}
+    for c in range(len(cfgs)):
+        for key in glb_config:
+            if not key in list(cfgs[c].keys()): cfgs[c][key] = config[key]
         # cfg['device'] = config['dev']
         # cfg['epochs'] = config['epochs']
         # cfg['batch_size'] = config['bs']
-        if not 'weight_reg' in cfg.keys():
-            cfg['weight_reg'] = 0.
+        if not 'weight_reg' in cfgs[c].keys(): cfgs[c]['weight_reg'] = 0.
+        cfgs[c] = parseConfig(cfgs[c])
         '''if isinstance(config['optim'], str):
             if 'Adam' in config['optim']:
                 config['optim'] = torch.optim.Adam
@@ -136,9 +137,9 @@ def main():
             test_dataset = CustomDataset(config['root_dir'], fps_test, fts_test, wcs_test, products, ToTensor(), device='cpu')
 
             # train_model
-            for config in cfgs:
-                mdl = fit(config, train_dataset, test_dataset, raytune=False, determinist=False, const=False, gradclip=True, scale=True)
-                mdl.epochs_trained = config['epochs']
+            for cfg in cfgs:
+                mdl = fit(cfg, train_dataset, test_dataset)
+                mdl.epochs_trained = cfg['epochs']
                 mdl.save_model(override=True)
                 shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))
                 #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))

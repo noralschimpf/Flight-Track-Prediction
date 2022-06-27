@@ -1,16 +1,16 @@
 import torch, torch.nn as nn, torch.nn.functional as F
 import os, inspect
 
-# from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
-# from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
+from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
 
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
-        initdict = copy(self.__dict__)
+        initdict = self.__dict__.copy()
 
         ################################################################
         # Store Model Configuration as attributes
@@ -19,7 +19,7 @@ class CONV_RECURRENT(nn.Module):
                 self.conv_input = config[key][0]
                 self.conv_hidden = config[key][1]
                 self.conv_output = config[key][2]
-            else: self.key = config[key]
+            else: self.__setattr__(key,config[key])
         if config['batchnorm'] == 'None':
             self.bn = False
             self.bn_af = False
@@ -30,7 +30,7 @@ class CONV_RECURRENT(nn.Module):
             self.bn = True
             self.bn_af = True
         self.classname = str(type(self)).split('\'')[1]
-        structdict = copy(self.__dict__)
+        structdict = self.__dict__.copy()
 
 
         ################################################################
@@ -122,29 +122,30 @@ class CONV_RECURRENT(nn.Module):
             self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
 
         if self.device.__contains__('cuda'):
-            self.cuda(self.device.split(':')[1])
+            self.cuda(int(self.device.split(':')[1]))
             self.device = '{}:{}'.format(self.fc[0].bias.device.type, self.fc[0].bias.device.index)
             structdict['device'] = self.device
 
-
+        ################################################################
+        # Initialize Loss Function
+        self.loss_function = self.loss_function()
 
         ################################################################
         # Configure optimizer and optimizer scheduling
-        args, varargs, keywords, defaults = inspect.getargspec(config['optim'].__init__)
+        args, varargs, keywords, defaults = inspect.getargspec(config['optimizer'].__init__)
         if 'lr' in args and 'weight_decay' in args:
             if 'momentum' in args and 'nesterov' in args:
-                self.optimizer = config['optim'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'],
+                self.optimizer = config['optimizer'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'],
                                                 momentum=config['momentum'],
                                                 nesterov=config['nesterov'])
             else:
-                self.optimizer = config['optim'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'])
-        self.optim = type(self.optimizer); structdict['optim'] = self.optim
+                self.optimizer = config['optimizer'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'])
+        self.optim = type(self.optimizer); structdict['optimizer'] = self.optim
 
         if 'decay_step' in config and 'decay_gamma' in config:
             self.sched = torch.optim.lr_scheduler.StepLR(self.optimizer,
                                                         step_size=config['decay_step'], gamma=config['decay_gamma'])
 
-        self.loss_function = config['loss']; structdict['loss_fn'] = self.loss_function
         self.epochs_trained = 0
 
         self.struct_dict = {x: structdict[x] for x in (set(structdict) - set(initdict))}
@@ -262,7 +263,7 @@ class CONV_RECURRENT(nn.Module):
                             'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
                             'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
                             'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
-                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
+                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.batchnorm}
         if hasattr(self, 'sched'):
             self.struct_dict['sched'] = self.sched
 
