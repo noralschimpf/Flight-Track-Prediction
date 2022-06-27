@@ -85,19 +85,19 @@ class CONV_RECURRENT(nn.Module):
         # IndRNN model
         self.rnns = nn.ModuleList()
 
-        # for i in range(self.rnn_layers):
-        #     if i == 0:
-        #         lstm_insize = self.rnn_input
-        #         self.rnns.append(torch.nn.Dropout(self.droprate))
-        #     else: lstm_insize = self.rnn_hidden
-        #
-        #     if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn: self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
-        #     elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
-        #         self.rnns.append(self.rnn_type(input_size=lstm_insize, hidden_size=self.rnn_hidden))
-        #     #if self.bn: self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
-        #     if self.bn: self.rnns.append(torch.nn.BatchNorm1d(self.rnn_hidden, affine=self.bn_af))
-        #     if not i == self.rnn_layers:
-        #         self.rnns.append(torch.nn.Dropout(self.droprate))
+        for i in range(self.rnn_layers):
+            if i == 0:
+                lstm_insize = self.rnn_input
+                self.rnns.append(torch.nn.Dropout(self.droprate))
+            else: lstm_insize = self.rnn_hidden
+
+            if self.rnn_type == indrnn or self.rnn_type == cuda_indrnn: self.rnns.append(self.rnn_type(hidden_size=self.rnn_hidden))
+            elif self.rnn_type == torch.nn.LSTM or self.rnn_type == torch.nn.GRU:
+                self.rnns.append(self.rnn_type(input_size=lstm_insize, hidden_size=self.rnn_hidden))
+            #if self.bn: self.rnns.append(BatchNorm(hidden_size=self.rnn_hidden, seq_len=-1))
+            if self.bn: self.rnns.append(torch.nn.BatchNorm1d(self.rnn_hidden, affine=self.bn_af))
+            if not i == self.rnn_layers:
+                self.rnns.append(torch.nn.Dropout(self.droprate))
 
             # gru/lstm(input_size, hidden_size, num_layers)
             # indrnn(hidden_size)
@@ -149,6 +149,9 @@ class CONV_RECURRENT(nn.Module):
         self.epochs_trained = 0
 
         self.struct_dict = {x: structdict[x] for x in (set(structdict) - set(initdict))}
+
+        print(self)
+        print(self.optimizer)
 
 
 
