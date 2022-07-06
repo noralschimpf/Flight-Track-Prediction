@@ -33,7 +33,9 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
     if config["const"]: mdl.apply(init_constant)
 
 
-    mdl.update_dict()
+    mdl.update_dict(); eps = config['epochs']
+    mdlpath = f'Initialized Plots/{"&".join(mdl.features)}/{mdl.model_name().replace("EPOCHS0",f"EPOCHS{eps}")}'
+    if not os.path.isdir(mdlpath): os.makedirs(mdlpath)
 
     if config['checkpoint_dir'] != "None":
         chkpt = os.path.join(config["checkpoint_dir"], 'checkpoint')
@@ -66,7 +68,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 
                 # scale alts/ETs -1000 - 64000 -> 0-1
                 fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
-                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
+                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 1000.)
                 wc = (wc + 1000.) / (64000. + 1000.)
 
             if mdl.paradigm == 'Regression':
@@ -170,7 +172,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             plt.xlabel('Flight')
             plt.ylabel('Loss (MSE)')
             # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
-            plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
+            plt.savefig(f'{mdlpath}/Eval Epoch{ep+1}.png', dpi=400)
             plt.close()
             del losses
             gc.collect()
@@ -205,7 +207,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         plt.title('Avg Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Avg Loss (MSE)')
-        plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+        plt.savefig(f'{mdlpath}/Model Eval.png', dpi=300)
         plt.close()
 
         plt.plot(e_losses[:], label='train data')
@@ -216,9 +218,9 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         plt.ylabel('Avg Loss (MSE)')
         plt.ylim([0, .01])
         plt.yticks(np.linspace(0, .01, 11))
-        plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
+        plt.savefig(f'{mdlpath}/Model Eval RangeLimit.png', dpi=300)
         plt.close()
 
         df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
-        df_eloss.to_csv('model_epoch_losses.txt')
+        df_eloss.to_csv(f'{mdlpath}/model_epoch_losses.txt')
         return mdl

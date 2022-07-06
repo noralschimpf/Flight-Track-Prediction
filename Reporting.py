@@ -78,7 +78,7 @@ for mdl in mdl_dirs:
 
                 # plot trajectory v flight plan v actual, include mse, reduction in title and norms in legend
 
-                if f%10 == 0 and plotting:
+                if f%500 == 0 and plotting:
                     reduction_2d = fn.reduction(l2_fps_2d[f], l2_preds_2d[f])
                     reduction_3d = fn.reduction(l2_fps_3d[f], l2_preds_3d[f])
                     m = Basemap(width=6000000, height=4000000,

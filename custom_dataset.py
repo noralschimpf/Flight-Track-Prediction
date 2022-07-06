@@ -68,7 +68,8 @@ class ToTensor(object):
             return sample
 
 def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: str = '', ft_subdir: str = '', wc_subdir: str = ''):
-    logging.basicConfig(filename="Data Validation.log", filemode="w")
+    logging.basicConfig(filename="Test Validation.log", filemode="w")
+    logging.warning('flight plan, minlen, fplen, difference')
     if fp_subdir == '': fp_subdir = '/Flight Plans'
     if ft_subdir == '': ft_subdir = '/Flight Tracks'
     if wc_subdir == '': wc_subdir = '/Weather Cubes'
@@ -112,6 +113,7 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
             try:
                 fp_idx = tmp_fp.index(fp)
                 ft_idx = tmp_ft.index(ft)
+                wc_bools = [wc in tmp_wc[x] for x in range(len(tmp_wc))]
                 wc_idx = [tmp_wc[x].index(wc) for x in range(len(tmp_wc))]
                 flight_plan.append(os.path.abspath(fp_dir + '/' + fp))
                 flight_track.append(os.path.abspath(ft_dir + '/' + ft))
@@ -143,6 +145,9 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
             list_underMin.append(i)
             fp = flight_plan[i]
             logging.warning(f'{fp}. {minlen}, {df_fp.shape[0]}, {minlen-df_fp.shape[0]}')
+        # else:
+        #     logging.info((f'{fp}, {minlen}, {df_fp.shape[0]}, {minlen - df_fp.shape[0]}')
+
     print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), under_min, list_underMin))
     for i in range(len(list_underMin)):
         flight_desc = flight_plan[list_underMin[i] - i].split('\\')[-2:]

@@ -6,6 +6,7 @@ eps = 500
 os.chdir('../Models/ECHO_TOP/')
 mdldirs = [x for x in os.listdir() if 'EPOCHS{}'.format(eps) in x and os.path.isdir(x)]
 for dir in mdldirs:
+    if not dir == 'CONV1.0.0-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS3-BATCH5-RNN6_100_3': continue
     os.chdir(dir)
     shortdir = dir.split('-')[:-2]; shortdir[0] = shortdir[0][:-4]; shortdir[2]=shortdir[2][3:]
     shortdir[3] = shortdir[3][4:]; shortdir = '-'.join(shortdir)

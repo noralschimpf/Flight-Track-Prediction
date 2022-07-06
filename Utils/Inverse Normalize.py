@@ -10,6 +10,7 @@ def inv_norm(path_csv: str, path_data: str):
     lat_scaler = MinMaxScaler(feature_range=[0,1])
     lon_scaler = MinMaxScaler(feature_range=[0,1])
     alt_scaler = MinMaxScaler(feature_range=[0,1])
+    # alt_ft_scaler = lambda x: 1000. + (64000.+10000.)*x
     vil_scaler = MinMaxScaler(feature_range=[0,1])
     tmp_scaler = MinMaxScaler(feature_range=[0,1])
     uw_scaler = MinMaxScaler(feature_range=[0,1])
@@ -21,6 +22,7 @@ def inv_norm(path_csv: str, path_data: str):
     lat_scaler.fit(np.array([[24.],[50.]]))
     lon_scaler.fit(np.array([[-126.],[-66.]]))
     alt_scaler.fit(np.array([[-1000.],[64000.]]))
+    # alt_ft_scaler.fit(np.array([[-10000.],[64000.]]))
     #alt_scaler.fit(np.array([[-1000.],[80000.]]))
     vil_scaler.fit(np.array([[-.00244140625], [80]]))
     tmp_scaler.fit(np.array([[150],[350]]))
@@ -61,8 +63,8 @@ def inv_norm(path_csv: str, path_data: str):
         nda_data_denormed[:, 4] = lon_scaler.inverse_transform(nda_data[:, 4].reshape(-1,1)).reshape(-1)
         nda_data_denormed[:, 7] = lon_scaler.inverse_transform(nda_data[:, 7].reshape(-1,1)).reshape(-1)
         nda_data_denormed[:, 2] = alt_scaler.inverse_transform(nda_data[:, 2].reshape(-1, 1)).reshape(-1)
-        nda_data_denormed[:, 5] = alt_scaler.inverse_transform(nda_data[:, 5].reshape(-1, 1)).reshape(-1)
-        nda_data_denormed[:, 8] = alt_scaler.inverse_transform(nda_data[:, 8].reshape(-1, 1)).reshape(-1)
+        nda_data_denormed[:, 5] = alt_scaler(nda_data[:, 5].reshape(-1, 1)).reshape(-1)
+        nda_data_denormed[:, 8] = alt_scaler(nda_data[:, 8].reshape(-1, 1)).reshape(-1)
 
         df_data_denormed = pd.DataFrame(
             data={'flight plan LAT': nda_data_denormed[:,0], 'flight plan LON': nda_data_denormed[:,1],

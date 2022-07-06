@@ -49,8 +49,7 @@ def main():
     #saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
     #cfg_lstm = sarlstm.get_best_config(metric='valloss', mode='min')
 
-    cfgs = [config['models']['config_dflt_cnnlstm'],
-            config['models']['config_cnnlstm']]
+    cfgs = [config['models']['config_dflt_cnnlstm']]
 
     # Correct Models
     glb_config = {key: config[key] for key in list(set(config.keys()) - set(['models']))}
@@ -152,7 +151,7 @@ def main():
                                     os.path.join('Models',prdstr, mdl.model_name(), foldstr, fname))
 
                 #shutil.move('Models/{}'.format(mdl.model_name()), 'Models/{}/{}'.format(mdl.model_name(), foldstr))
-                edtime = datetime.now()
+                # edtime = datetime.now()
                 #print('DONE: {}'.format(edtime - sttime))
 
                 if not os.path.isdir('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
@@ -160,15 +159,17 @@ def main():
                 if not os.path.isdir('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
                     os.makedirs('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
 
-                plots_to_move = [x for x in os.listdir('Initialized Plots') if x.__contains__('.png')]
+                plotstr = f'Initialized Plots/{prdstr}/{mdl.model_name()}'
+                plots_to_move = [x for x in os.listdir(plotstr) if x.__contains__('.png')]
                 for plot in plots_to_move:
-                    shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
-                    shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
-                    os.remove('Initialized Plots/{}'.format(plot))
+                    shutil.copy(f'{plotstr}/{plot}', f'{plotstr}/{foldstr}/{plot}')
+                    # shutil.copy('Initialized Plots/{}'.format(plot), 'Initialized Plots/{}/{}/{}/{}'.format(prdstr, mdl.model_name(),foldstr, plot))
+                    os.remove(f'{plotstr}/{plot}')
 
-                shutil.copy('test_flight_samples.txt', 'Models/{}/{}/{}/test_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
-                shutil.copy('train_flight_samples.txt', 'Models/{}/{}/{}/train_flight_samples.txt'.format(prdstr, mdl.model_name(), foldstr))
-                shutil.copy('model_epoch_losses.txt', 'Models/{}/{}/{}/model_epoch_losses.txt'.format(prdstr, mdl.model_name(), foldstr))
+                shutil.copy(f'{testname}', f'Models/{prdstr}/{mdl.model_name()}/{foldstr}/test_flight_samples.txt')
+                shutil.copy(f'{trainname}', f'Models/{prdstr}/{mdl.model_name()}/{foldstr}/train_flight_samples.txt')
+                shutil.copy(f'Initialized Plots/{prdstr}/{mdl.model_name()}/model_epoch_losses.txt',
+                            f'Models/{prdstr}/{mdl.model_name()}/{foldstr}/model_epoch_losses.txt')
 
 
 if __name__ == '__main__':
