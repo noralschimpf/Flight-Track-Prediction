@@ -148,7 +148,7 @@ def ValidFiles(root_dir: str, products: List[str], under_min: dict, fp_subdir: s
         # else:
         #     logging.info((f'{fp}, {minlen}, {df_fp.shape[0]}, {minlen - df_fp.shape[0]}')
 
-    print('{} Valid items under minimum entries ({}): {}'.format(len(list_underMin), under_min, list_underMin))
+    print('{} Valid items under minimum entries ({}):'.format(len(list_underMin), under_min))
     for i in range(len(list_underMin)):
         flight_desc = flight_plan[list_underMin[i] - i].split('\\')[-2:]
         flight_desc[-1] = '_'.join(flight_desc[-1].split('_')[2:])

@@ -4,7 +4,7 @@ from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent a
 from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
 from Utils.Misc import parseConfig
 
-def load_model(model_path: str):
+def load_model(model_path: str, device='cuda:0'):
     mdlname = model_path.split(os.sep)[-1]
 
     # Load Model
@@ -42,6 +42,7 @@ def load_model(model_path: str):
         if not key in list(cfg.keys()): cfg[key] = config[key]
     if not 'weight_reg' in cfg.keys(): cfg['weight_reg'] = 0.
     cfg = parseConfig(cfg)
+    cfg['device'] = device
     mdl = CONV_RECURRENT(config=cfg)
 
 

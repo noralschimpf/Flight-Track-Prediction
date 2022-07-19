@@ -30,7 +30,7 @@ def main():
     # Open Training Config
     f = open('Utils/Configs.json')
     config = json.load(f)
-
+    config['device'] = 'cuda:0'
 
 
 
@@ -49,7 +49,7 @@ def main():
     #saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
     #cfg_lstm = sarlstm.get_best_config(metric='valloss', mode='min')
 
-    cfgs = [config['models']['config_dflt_cnnlstm']]
+    cfgs = [config['models']['config_cnnlstm'], config['models']['config_sargru']]
 
     # Correct Models
     glb_config = {key: config[key] for key in list(set(config.keys()) - set(['models']))}

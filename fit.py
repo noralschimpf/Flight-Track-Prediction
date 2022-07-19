@@ -59,6 +59,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 fp, ft = fp[:, :, :], ft[:, :, :]
             if config['scale']:
                 # scale lats 24 - 50 -> 0-1
+
                 fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
                 ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
 
@@ -67,6 +68,8 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 ft[:, :, 1] = (ft[:, :, 1] + 126.) / (-66. + 126.)
 
                 # scale alts/ETs -1000 - 64000 -> 0-1
+                fpa, fta, wca = fp[:,:,2], ft[:,:,2], wc
+                print(f'FP: {fpa.min()}-{fpa.max()}\nFT:{fta.min()}-{fta.max()}\nWC:{wca.min()}-{wca.max()}')
                 fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
                 ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 1000.)
                 wc = (wc + 1000.) / (64000. + 1000.)

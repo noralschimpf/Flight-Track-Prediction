@@ -150,9 +150,6 @@ class CONV_RECURRENT(nn.Module):
 
         self.struct_dict = {x: structdict[x] for x in (set(structdict) - set(initdict))}
 
-        print(self)
-        print(self.optimizer)
-
 
 
     def forward(self, x_w, x_t):

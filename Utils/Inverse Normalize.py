@@ -63,8 +63,8 @@ def inv_norm(path_csv: str, path_data: str):
         nda_data_denormed[:, 4] = lon_scaler.inverse_transform(nda_data[:, 4].reshape(-1,1)).reshape(-1)
         nda_data_denormed[:, 7] = lon_scaler.inverse_transform(nda_data[:, 7].reshape(-1,1)).reshape(-1)
         nda_data_denormed[:, 2] = alt_scaler.inverse_transform(nda_data[:, 2].reshape(-1, 1)).reshape(-1)
-        nda_data_denormed[:, 5] = alt_scaler(nda_data[:, 5].reshape(-1, 1)).reshape(-1)
-        nda_data_denormed[:, 8] = alt_scaler(nda_data[:, 8].reshape(-1, 1)).reshape(-1)
+        nda_data_denormed[:, 5] = alt_scaler.inverse_transform(nda_data[:, 5].reshape(-1, 1)).reshape(-1)
+        nda_data_denormed[:, 8] = alt_scaler.inverse_transform(nda_data[:, 8].reshape(-1, 1)).reshape(-1)
 
         df_data_denormed = pd.DataFrame(
             data={'flight plan LAT': nda_data_denormed[:,0], 'flight plan LON': nda_data_denormed[:,1],

@@ -4,7 +4,7 @@
   "dataopts": ["generate", "read"],
   "splitopts": ["random", "xval", "read"],
 
-  "epochs": 500,
+  "epochs": 300,
   "batch_size": 5,
   "folds": 4,
   "loss_function": "torch.nn.MSELoss",
