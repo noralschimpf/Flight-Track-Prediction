@@ -1,0 +1,255 @@
+{
+  "paradigms": {"0": "Regression", "1": "Seq2Seq"},
+  "attns": {"0": "None", "1": "after", "2": "replace"},
+  "dataopts": ["generate", "read"],
+  "splitopts": ["random", "xval", "read"],
+
+  "epochs": 300,
+  "batch_size": 5,
+  "folds": 4,
+  "loss_function": "torch.nn.MSELoss",
+
+  "scale": true,
+  "raytune": false,
+  "determinist": true,
+  "const": false,
+  "gradclip": false,
+  "checkpoint_dir": "None",
+
+  "data":  "generate",
+  "split": "xval",
+
+  "device": "cuda:0",
+  "root_dir": "/home/dualboot/Data/Train",
+  "train_splitfile": "/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/train_flight_samples.txt",
+  "test_splitfile": "/home/dualboot/Desktop/Flight-Track-Prediction/Models/ECHO_TOP/CONV1.0.05-LSTM1lay-OPTAdam-LOSSMSELoss()-EPOCHS500-BATCH1-RNN6_100_3/fold1-4/test_flight_samples.txt",
+
+  "list_products": [["ECHO_TOP"]],
+  "dense_hidden": [16],
+
+  "models": {
+    "config_cnngru_optsched": {
+      "name": "CNN_GRU-OPTFULL-SCHED",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.GRU",
+      "features": ["ECHO_TOP"],
+      "attntype": "None",
+
+      "optimizer": "tune.grid_search([torch.optim.SGD,torch.optim.Adam, torch.optim.RMSprop])",
+      "lr": 0.01,
+      "momentum": 0.5,
+      "nesterov": true,
+      "gamma": 0.5,
+      "step": 10,
+
+      "ConvCh": [1,28,22],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 1,
+      "rnn_hidden": 650,
+      "rnn_output": 3,
+
+      "droprate": 1e-3,
+      "epochs": 30,
+      "weight_reg": 1e-8,
+      "batchnorm": "None"
+    },
+
+    "config_cnnlstm": {
+      "name": "CNN_LSTM-TUNED",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.LSTM",
+      "features": ["ECHO_TOP"],
+      "attntype": "None",
+      "optimizer": "torch.optim.Adam",
+      "gamma": 0.5,
+      "step": 10,
+      "lr": 0.01,
+      "ConvCh": [1,28,22],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 1,
+      "rnn_hidden": 1000,
+      "rnn_output":  3,
+      "droprate": 1e-3,
+      "weight_reg": 1e-6,
+      "batchnorm": "None"
+    },
+
+    "config_sarlstm": {
+      "name": "SA_LSTM-TUNED",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.LSTM",
+      "features": ["ECHO_TOP"],
+      "attntype": "replace",
+      "optimizer": "torch.optim.Adam",
+      "gamma": 0.5,
+      "step": 30,
+      "lr": 0.01,
+      "ConvCh": [1,31,8],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 2,
+      "rnn_hidden": 600,
+      "rnn_output":  3,
+      "droprate": 1e-3,
+      "weight_reg": 1e-6,
+      "batchnorm": "None"
+    },
+
+    "config_cnngru": {
+      "name": "CNN_GRU-TUNED",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.GRU",
+      "features": ["ECHO_TOP"],
+      "attntype": "None",
+      "optimizer": "torch.optim.RMSprop",
+      "gamma": 0.5,
+      "step": 10,
+      "lr": 0.01,
+      "ConvCh": [1,28,22],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 1,
+      "rnn_hidden": 650,
+      "rnn_output":  3,
+      "droprate": 1e-3,
+      "weight_reg": 1e-6,
+      "batchnorm": "None"
+    },
+
+    "config_sargru": {
+      "name": "SA_GRU-TUNED",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.GRU",
+      "features": ["ECHO_TOP"],
+      "attntype": "replace",
+      "optimizer": "torch.optim.RMSprop",
+      "gamma": 0.5,
+      "step": 30,
+      "lr": 0.01,
+      "ConvCh": [1,31,8],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 2,
+      "rnn_hidden": 600,
+      "rnn_output":  3,
+      "droprate": 1e-3,
+      "weight_reg": 1e-6,
+      "batchnorm": "None"
+    },
+
+    "config_dflt_cnnlstm": {
+      "name": "CNN_LSTM-DFLT",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.LSTM",
+      "features": ["ECHO_TOP"],
+      "attntype": "None",
+      "optimizer": "torch.optim.Adam",
+      "ConvCh": [1,2,4],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 1,
+      "rnn_hidden": 100,
+      "rnn_output":  3,
+      "droprate": 0.0,
+      "lr": 2e-4,
+      "weight_reg": 0.0,
+      "batchnorm": "None"
+    },
+
+    "config_dflt_sarlstm": {
+      "name": "SA_LSTM-DFLT",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.LSTM",
+      "features": ["ECHO_TOP"],
+      "attntype": "replace",
+      "optimizer": "torch.optim.Adam",
+      "ConvCh": [1,2,4],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 1,
+      "rnn_hidden": 100,
+      "rnn_output":  3,
+      "droprate": 0.0,
+      "lr": 2e-4,
+      "weight_reg": 0.0,
+      "batchnorm": "None"
+    },
+
+    "config_dflt_cnngru": {
+      "name": "CNN_GRU-DFLT",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.GRU",
+      "features": ["ECHO_TOP"],
+      "attntype": "None",
+      "optimizer": "torch.optim.Adam",
+      "ConvCh": [1,2,4],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 1,
+      "rnn_hidden": 100,
+      "rnn_output":  3,
+      "droprate": 0.0,
+      "lr": 2e-4,
+      "weight_reg": 0.0,
+      "batchnorm": "None"
+    },
+
+    "config_dflt_sargru": {
+      "name": "SA_GRU-DFLT",
+      "paradigm": "Seq2Seq",
+      "cube_height": 1,
+      "rnn_type": "torch.nn.GRU",
+      "features": ["ECHO_TOP"],
+      "attntype": "replace",
+      "optimizer": "torch.optim.Adam",
+      "ConvCh": [1,2,4],
+      "dense_hidden": [16],
+      "rnn_input": 6,
+      "rnn_layers": 1,
+      "rnn_hidden": 100,
+      "rnn_output":  3,
+      "droprate": 0.0,
+      "lr": 2e-4,
+      "weight_reg": 0.0,
+      "batchnorm": "None"
+    },
+
+    "config_attn_init": {
+      "name": "ATTN-CONSTINIT",
+      "cube_height": 1,
+      "features": ["ECHO_TOP"],
+      "paradigm": "Seq2Seq",
+      "optimizer": "torch.optim.RMSprop",
+      "gamma": 0.5,
+      "step": 30,
+      "lr": 0.01,
+      "latlon_wb": {
+        "w_q": 1.0, "w_k": 1.0, "w_v": 1.0,
+        "b_q": 0.0, "b_k": -1.0, "b_v": 0.0
+      },
+      "alt_wb": {
+        "w_q": 1.0, "w_k": 1.0, "w_v": 1.0,
+        "b_q": 0.0, "b_k": 0.0, "b_v": 0.0
+      }
+    }
+  },
+
+  "optim_defaults": {
+    "sgd": {"lr":  0.001, "mom":  0.0, "nest":  false},
+    "sgd+momentum": {"lr":  0.01, "mom":  0.7, "nest":  true},
+    "adam": {"lr":  0.001},
+    "torch.optim.RMSprop": {"lr":  0.001},
+    "adadelta": {"lr":  1.0},
+    "adagrad": {"lr":  0.001}
+  }
+ }

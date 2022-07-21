@@ -19,7 +19,7 @@ plotting = False
 valid_products = ['ECHO_TOP','VIL','tmp','uwind','vwind']
 mdl_product_dirs = [os.path.join(os.path.abspath('.'), 'Models/{}'.format(x)) for x in os.listdir('Models') if
                         os.path.isdir('Models/{}'.format(x)) and any([y in x for y in valid_products])]
-mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS500' in y]
+mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS' in y]
 mdl_dirs= [x for x in mdl_dirs if not len(os.listdir(x)) == sum([1 for y in os.listdir(x) if 'IGNORE' in y])]
 mdls = [x for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCH' in x]
 df_val_summary, df_test_summary = pd.DataFrame(), pd.DataFrame()
@@ -78,7 +78,7 @@ for mdl in mdl_dirs:
 
                 # plot trajectory v flight plan v actual, include mse, reduction in title and norms in legend
 
-                if f%10 == 0 and plotting:
+                if f%500 == 0 and plotting:
                     reduction_2d = fn.reduction(l2_fps_2d[f], l2_preds_2d[f])
                     reduction_3d = fn.reduction(l2_fps_3d[f], l2_preds_3d[f])
                     m = Basemap(width=6000000, height=4000000,

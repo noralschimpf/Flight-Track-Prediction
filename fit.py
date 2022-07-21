@@ -1,19 +1,14 @@
 import torch
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import os, shutil, gc, tqdm, json, random
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
+import os, shutil, gc, tqdm, json, random, inspect
 from custom_dataset import pad_batch
 from libmodels.CONV_RECURRENT import CONV_RECURRENT
 from libmodels.model import load_model, init_constant
 from ray import tune
 
-def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
-        raytune: bool = False, determinist: bool = True, const: bool = False, gradclip: bool = False, model_name: str = 'Default',
-        scale: bool = False):
-    #print(config['mdldir'])
+def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset):
 
-    if determinist:
+    if config["determinist"]:
 	    # FORCE DETERMINISTIC INITIALIZATION
 	    seed = 1234
 	    random.seed(seed)
@@ -34,52 +29,16 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
     test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=8, pin_memory=True,
                          shuffle=False, drop_last=True)
 
-    mdl = CONV_RECURRENT(paradigm=config['paradigm'], cube_height=config['cube_height'], device=config['device'],
-                         rnn=config['rnn'], features=config['features'], rnn_layers=config['RNNDepth'],
-                         attn=config['attn'], batch_size=config['batch_size'],
-                         conv_input=config['ConvCh'][0], conv_hidden=config['ConvCh'][1],
-                         conv_output=config['ConvCh'][2], batchnorm=config['batchnorm'],
-                         dense_hidden=config['HLs'], rnn_input=config['RNNIn'], rnn_hidden=config['RNNHidden'],
-                         rnn_output=3, droprate=config['droprate'])
-    if const: mdl.apply(init_constant)
-    if config['optim'] == 'sgd':
-        #lr, mom, dec, nest= 0.001, 0.0, config['weight_reg'], False
-        lr, mom, dec, nest = 0.01, 0.7, config['weight_reg'], True
-        if 'forcelr' in config: lr = config['forcelr']
-        if 'forcemom' in config: mom = config['forcemom']
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=lr, weight_decay=dec, momentum=mom, nesterov=nest)
-    elif config['optim'] == 'sgd+momentum':
-        lr, mom, dec, nest = 0.001, 0.0, config['weight_reg'], False
-        if 'forcelr' in config: lr = config['forcelr']
-        if 'forcemom' in config: mom = config['forcemom']
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=1e-5, momentum=0.5, nesterov=False, weight_decay=dec)
-    elif config['optim'] == 'sgd+nesterov':
-        lr, mom, dec, nest = 0.001, 0.0, config['weight_reg'], False
-        if 'forcelr' in config: lr = config['forcelr']
-        if 'forcemom' in config: mom = config['forcemom']
-        mdl.optimizer = torch.optim.SGD(mdl.parameters(), lr=lr, momentum=mom, nesterov=True, weight_decay=dec)
-    elif config['optim'] == 'adam':
-        lr=0.001
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.Adam(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    elif config['optim'] == 'rmsprop':
-        lr = 0.001
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.RMSprop(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    elif config['optim'] == 'adadelta':
-        lr = 1.
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.Adadelta(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    elif config['optim'] == 'adagrad':
-        lr = 0.001
-        if 'forcelr' in config: lr = config['forcelr']
-        mdl.optimizer = torch.optim.Adagrad(mdl.parameters(), lr=lr, weight_decay=config['weight_reg'])
-    if 'forcestep' in config and 'forcegamma' in config:
-        mdl.sched = torch.optim.lr_scheduler.StepLR(mdl.optimizer, step_size=config['forcestep'],gamma=config['forcegamma'])
-    mdl.update_dict()
+    mdl = CONV_RECURRENT(config=config)
+    if config["const"]: mdl.apply(init_constant)
 
-    if checkpoint_dir:
-        chkpt = os.path.join(checkpoint_dir, 'checkpoint')
+
+    mdl.update_dict(); eps = config['epochs']
+    mdlpath = f'Initialized Plots/{"&".join(mdl.features)}/{mdl.model_name().replace("EPOCHS0",f"EPOCHS{eps}")}'
+    if not os.path.isdir(mdlpath): os.makedirs(mdlpath)
+
+    if config['checkpoint_dir'] != "None":
+        chkpt = os.path.join(config["checkpoint_dir"], 'checkpoint')
         with open(chkpt) as f:
             state = json.loads(f.read())
             start = state['step'] + 1
@@ -87,10 +46,10 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 
     epoch_losses = torch.zeros(config['epochs'], device=mdl.device)
     epoch_test_losses = torch.zeros(config['epochs'], device=mdl.device)
-    for ep in (tqdm.trange(config['epochs'], desc='epoch', position=0, leave=False) if not raytune else range(config['epochs'])):
+    for ep in (tqdm.trange(config['epochs'], desc='epoch', position=0, leave=False) if not config['raytune'] else range(config['epochs'])):
         losses = torch.zeros(len(train_dl), device=mdl.device)
 
-        for batch_idx, (fp, ft, wc) in enumerate((tqdm.tqdm(train_dl, desc='flight', position=1, leave=False) if not raytune else train_dl)):  # was len(flight_data)
+        for batch_idx, (fp, ft, wc) in enumerate((tqdm.tqdm(train_dl, desc='flight', position=1, leave=False) if not config['raytune'] else train_dl)):  # was len(flight_data)
             # Extract flight plan, flight track, and weather cubes
             if mdl.device.__contains__('cuda'):
                 fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
@@ -98,8 +57,9 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 wc = wc.cuda(device=mdl.device, non_blocking=True)
             else:
                 fp, ft = fp[:, :, :], ft[:, :, :]
-            if scale:
+            if config['scale']:
                 # scale lats 24 - 50 -> 0-1
+
                 fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
                 ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
 
@@ -108,8 +68,10 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 ft[:, :, 1] = (ft[:, :, 1] + 126.) / (-66. + 126.)
 
                 # scale alts/ETs -1000 - 64000 -> 0-1
+                fpa, fta, wca = fp[:,:,2], ft[:,:,2], wc
+                print(f'FP: {fpa.min()}-{fpa.max()}\nFT:{fta.min()}-{fta.max()}\nWC:{wca.min()}-{wca.max()}')
                 fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
-                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
+                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 1000.)
                 wc = (wc + 1000.) / (64000. + 1000.)
 
             if mdl.paradigm == 'Regression':
@@ -152,7 +114,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                 single_loss = mdl.loss_function(y_pred, ft)
                 losses[batch_idx] = single_loss.view(-1).detach().item()
                 single_loss.backward()
-                if gradclip: torch.nn.utils.clip_grad_norm_(mdl.parameters(), max_norm=2, norm_type=2)
+                if config['gradclip']: torch.nn.utils.clip_grad_norm_(mdl.parameters(), max_norm=2, norm_type=2)
                 mdl.optimizer.step()
 
             if batch_idx == len(train_dl) - 1:
@@ -170,7 +132,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             else:
                 fp, ft = fp[:, :, :], ft[:, :, :]
 
-            if scale:
+            if config['scale']:
                 # scale lats 24 - 50 -> 0-1
                 fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
                 ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
@@ -202,7 +164,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         epoch_test_losses[ep] = test_losses.mean().view(-1)
         mdl.train()
 
-        if (not raytune) and ep % 10 == 0:
+        if (not config['raytune']) and ep % 10 == 0:
             if mdl.device.__contains__('cuda'):
                 losses = losses.cpu()
                 test_losses = test_losses.cpu()
@@ -213,13 +175,13 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             plt.xlabel('Flight')
             plt.ylabel('Loss (MSE)')
             # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
-            plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
+            plt.savefig(f'{mdlpath}/Eval Epoch{ep+1}.png', dpi=400)
             plt.close()
             del losses
             gc.collect()
-        if (not raytune) and ep % 50 == 0:
+        if (not config['raytune']) and ep % 50 == 0:
             mdl.save_model(override=True)
-        if raytune:
+        if config['raytune']:
             if torch.isnan(epoch_test_losses[ep]): raise ValueError('Epoch Loss is NaN')
             with tune.checkpoint_dir(step=ep) as checkpoint_dir:
                 path = os.path.join(checkpoint_dir, 'checkpoint')
@@ -241,14 +203,14 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         epoch_test_losses = epoch_test_losses.cpu()
     e_losses = epoch_losses.detach().numpy()
     e_test_losses = epoch_test_losses.detach().numpy()
-    if not raytune:
+    if not config['raytune']:
         plt.plot(e_losses, label='train data')
         plt.plot(e_test_losses, label='test data')
         plt.legend()
         plt.title('Avg Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Avg Loss (MSE)')
-        plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+        plt.savefig(f'{mdlpath}/Model Eval.png', dpi=300)
         plt.close()
 
         plt.plot(e_losses[:], label='train data')
@@ -259,9 +221,9 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         plt.ylabel('Avg Loss (MSE)')
         plt.ylim([0, .01])
         plt.yticks(np.linspace(0, .01, 11))
-        plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
+        plt.savefig(f'{mdlpath}/Model Eval RangeLimit.png', dpi=300)
         plt.close()
 
         df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
-        df_eloss.to_csv('model_epoch_losses.txt')
+        df_eloss.to_csv(f'{mdlpath}/model_epoch_losses.txt')
         return mdl

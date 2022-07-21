@@ -1,53 +1,41 @@
-import torch
-import tqdm
-#from libmodels.IndRNN_pytorch.cuda_IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
+import torch, torch.nn as nn, torch.nn.functional as F
+import os, inspect
+
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as cuda_indrnn
 from libmodels.IndRNN_pytorch.IndRNN_onlyrecurrent import IndRNN_onlyrecurrent as indrnn
 from libmodels.IndRNN_pytorch.utils import Batch_norm_overtime as BatchNorm
 from libmodels.multiheaded_attention import MultiHeadedAttention as MHA
-import torch.nn as nn
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-import os
 
 # customized Convolution and LSTM model
 class CONV_RECURRENT(nn.Module):
-    def __init__(self, paradigm='Seq2Seq', device='cpu', cube_height=1, conv_input=1, conv_hidden=2, conv_output=4, dense_hidden=[16],
-                 rnn= torch.nn.LSTM, rnn_layers=1, rnn_input=6, rnn_hidden=100, rnn_output=3, batchnorm='None',
-                 attn='None', batch_size=1, droprate = .2, features: list =  ['ECHO_TOP'],
-                 optim:torch.optim=torch.optim.Adam, loss=torch.nn.MSELoss(), eptrained=0):
+    def __init__(self, config: dict):
         super().__init__()
-        # convolution layer for weather feature extraction prior to the RNN
-        self.bn_type = batchnorm
-        if batchnorm == 'None':
+        initdict = self.__dict__.copy()
+
+        ################################################################
+        # Store Model Configuration as attributes
+        for key in config:
+            if key == 'ConvCh':
+                self.conv_input = config[key][0]
+                self.conv_hidden = config[key][1]
+                self.conv_output = config[key][2]
+            else: self.__setattr__(key,config[key])
+        if config['batchnorm'] == 'None':
             self.bn = False
             self.bn_af = False
-        elif batchnorm == 'simple':
+        elif config['batchnorm'] == 'simple':
             self.bn = True
             self.bn_af = False
-        elif batchnorm == 'learn':
+        elif config['batchnorm'] == 'learn':
             self.bn = True
             self.bn_af = True
-        self.device = device
-        self.paradigm = paradigm
-        self.attntype = attn
-        self.batch_size = batch_size
-        self.droprate = droprate
-        self.features = features
-        self.cube_height = cube_height
+        self.classname = str(type(self)).split('\'')[1]
+        structdict = self.__dict__.copy()
 
-        self.conv_input = conv_input
-        self.conv_hidden = conv_hidden
-        self.conv_output = conv_output
-        self.dense_hidden = dense_hidden
 
-        self.rnn_type = rnn
-        self.rnn_layers = rnn_layers
-        self.rnn_input = rnn_input
-        self.rnn_hidden = rnn_hidden
-        self.rnn_output = rnn_output
+        ################################################################
+        # Initialize Model
         self.hidden_cell = None
-
 
         self.convs = nn.ModuleList()
         for i in range(len(self.features)):
@@ -134,28 +122,38 @@ class CONV_RECURRENT(nn.Module):
             self.linear = nn.Linear(self.rnn_hidden, self.rnn_output)
 
         if self.device.__contains__('cuda'):
-            self.cuda(self.device.split(':')[1])
+            self.cuda(int(self.device.split(':')[1]))
             self.device = '{}:{}'.format(self.fc[0].bias.device.type, self.fc[0].bias.device.index)
+            structdict['device'] = self.device
 
-        if not issubclass(optim, torch.optim.Optimizer):
-            optim = type(optim)
+        ################################################################
+        # Initialize Loss Function
+        self.loss_function = self.loss_function()
 
-        self.optimizer = optim(self.parameters())
-        self.loss_function = loss
-        self.epochs_trained = eptrained
+        ################################################################
+        # Configure optimizer and optimizer scheduling
+        args, varargs, keywords, defaults = inspect.getargspec(config['optimizer'].__init__)
+        if 'lr' in args and 'weight_decay' in args:
+            if 'momentum' in args and 'nesterov' in args:
+                self.optimizer = config['optimizer'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'],
+                                                momentum=config['momentum'],
+                                                nesterov=config['nesterov'])
+            else:
+                self.optimizer = config['optimizer'](self.parameters(), lr=config['lr'], weight_decay=config['weight_reg'])
+        self.optim = type(self.optimizer); structdict['optimizer'] = self.optim
 
-        self.struct_dict = {'class': str(type(self)).split('\'')[1],
-                            'device': self.device, 'paradigm': self.paradigm,
-                            'conv_input': self.conv_input, 'conv_hidden': self.conv_hidden,
-                            'conv_output': self.conv_output, 'attntype': self.attntype,
-                            'dense_hidden': self.dense_hidden, 'features': self.features,
-                            'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
-                            'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
-                            'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
-                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
+        if 'decay_step' in config and 'decay_gamma' in config:
+            self.sched = torch.optim.lr_scheduler.StepLR(self.optimizer,
+                                                        step_size=config['decay_step'], gamma=config['decay_gamma'])
+
+        self.epochs_trained = 0
+
+        self.struct_dict = {x: structdict[x] for x in (set(structdict) - set(initdict))}
+
+
 
     def forward(self, x_w, x_t):
-        # convolution apply first
+        # apply convolution first
         # input_seq = flight trajectory data + weather features
         # x_w is flight trajectory data
         # x_t is weather data (time ahead of flight)
@@ -265,7 +263,7 @@ class CONV_RECURRENT(nn.Module):
                             'rnn_type': self.rnn_type, 'rnn_layers': self.rnn_layers,
                             'rnn_input': self.rnn_input, 'rnn_hidden': self.rnn_hidden,
                             'rnn_output': self.rnn_output, 'hidden_cell': self.hidden_cell, 'droprate': self.droprate,
-                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.bn_type}
+                            'loss_fn': self.loss_function, 'optim': type(self.optimizer), 'batchnorm': self.batchnorm}
         if hasattr(self, 'sched'):
             self.struct_dict['sched'] = self.sched
 
