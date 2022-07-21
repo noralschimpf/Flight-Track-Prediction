@@ -273,13 +273,14 @@ class CONV_RECURRENT(nn.Module):
         if override_path == None:
             container = 'Models/{}/{}/'.format('&'.join(self.features),model_name)
             model_path = '{}/{}'.format(container, model_name)
-            while os.path.isfile(model_path) and not override:
-                choice = input("Model Exists:\n1: Replace\n2: New Model\n")
-                if choice == '1':
-                    break
-                elif choice == '2':
-                    name = input("Enter model name\n")
+            if os.path.isfile(model_path) and not override:
+                is_used=True; i=0
+                while is_used:
+                    name = self.model_name() + f"Chk{i}"
                     model_path = '{}/{}'.format(container,name)
+                    is_used = os.path.isfile(model_path)
+                    i += 1
+
             container = '/'.join(model_path.split('/')[:-1])
         else:
             container = override_path

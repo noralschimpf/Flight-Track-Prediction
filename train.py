@@ -2,7 +2,7 @@ import torch
 import os, shutil
 import numpy as np
 import pandas as pd
-import warnings
+import warnings, logging
 from datetime import datetime
 from custom_dataset import CustomDataset, ValidFiles, SplitStrList, pad_batch
 # from attn_dataset import ATTNDataset, pad_batch as attn_pad
@@ -23,6 +23,7 @@ import json
 
 
 def main():
+    logging.basicConfig(filename='logs/Training.log', filemode='w', level=logging.info() )
     warnings.filterwarnings('ignore')
     if os.name == 'nt':
         torch.multiprocessing.set_start_method('spawn')
@@ -137,8 +138,23 @@ def main():
 
             # train_model
             for cfg in cfgs:
-                mdl = fit(cfg, train_dataset, test_dataset)
-                mdl.epochs_trained = cfg['epochs']
+                # retry fit if diverge
+                retries=3; retry_count=0
+                for i in range(retries):
+                    try: mdl = fit(cfg, train_dataset, test_dataset)
+                    except ValueError as e:
+                        if i < retries:
+                            newlr = config['lr']/10
+                            config['lr'] = newlr
+                            retry_count+=1
+                            logging.warning(e)
+                            logging.info(f'reducing learning rate to {newlr}')
+                        else:
+                            logging.warning(e)
+                            logging.error(f'Cannot converge {mdl.model_name()}')
+                if not retry_count==retries: foldstr = 'IGNORE' + foldstr
+
+                mdl.epochs_trained = config['epochs']
                 mdl.save_model(override=True)
                 shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))
                 #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))

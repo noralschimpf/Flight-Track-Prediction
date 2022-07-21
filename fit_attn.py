@@ -1,44 +1,20 @@
 import torch
-import numpy as np, pandas as pd, matplotlib.pyplot as plt
-import os, shutil, gc, tqdm, json, random, inspect
-from custom_dataset import pad_batch
-from libmodels.CONV_RECURRENT import CONV_RECURRENT
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
+import os, shutil, gc, tqdm, json, random
+from attn_dataset import pad_batch
+from libmodels.ATTNTP import ATTN_TP
 from libmodels.model import load_model, init_constant
 from ray import tune
-
-
-def store_losses(e_losses, e_test_losses, ):
-    plt.plot(e_losses, label='train data')
-    plt.plot(e_test_losses, label='test data')
-    plt.legend()
-    plt.title('Avg Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Avg Loss (MSE)')
-    plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
-    plt.close()
-
-    plt.plot(e_losses[:], label='train data')
-    plt.plot(e_test_losses[:], label='test data')
-    plt.legend()
-    plt.title('Avg Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Avg Loss (MSE)')
-    plt.ylim([0, .01])
-    plt.yticks(np.linspace(0, .01, 11))
-    plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
-    plt.close()
-
-    df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
-    df_eloss.to_csv('model_epoch_losses.txt')
-
-
 
 def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: torch.utils.data.Dataset, checkpoint_dir=None,
         raytune: bool = False, determinist: bool = True, const: bool = False, gradclip: bool = False, model_name: str = 'Default',
         scale: bool = False):
     #print(config['mdldir'])
 
-    if config["determinist"]:
+    if determinist:
 	    # FORCE DETERMINISTIC INITIALIZATION
 	    seed = 1234
 	    random.seed(seed)
@@ -54,21 +30,23 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 	    #torch.backends.cudnn.enabled = False
 	    torch.use_deterministic_algorithms(True)
 
-    train_dl = torch.utils.data.DataLoader(train_dataset, collate_fn=pad_batch, batch_size=config['batch_size'], num_workers=8, pin_memory=True,
+    train_dl = torch.utils.data.DataLoader(train_dataset, collate_fn=pad_batch, batch_size=config['batch_size'], num_workers=0, pin_memory=True,
                           shuffle=False, drop_last=True)
-    test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=8, pin_memory=True,
+    test_dl = torch.utils.data.DataLoader(test_dataset, collate_fn=pad_batch, batch_size=1, num_workers=0, pin_memory=True,
                          shuffle=False, drop_last=True)
 
-    mdl = CONV_RECURRENT(config=config)
-    if config["const"]: mdl.apply(init_constant)
+    # mdl = CONV_RECURRENT(paradigm=config['paradigm'], cube_height=config['cube_height'], device=config['device'],
+    #                      rnn=config['rnn'], features=config['features'], rnn_layers=config['RNNDepth'],
+    #                      attn=config['attn'], batch_size=config['batch_size'],
+    #                      conv_input=config['ConvCh'][0], conv_hidden=config['ConvCh'][1],
+    #                      conv_output=config['ConvCh'][2], batchnorm=config['batchnorm'],
+    #                      dense_hidden=config['HLs'], rnn_input=config['RNNIn'], rnn_hidden=config['RNNHidden'],
+    #                      rnn_output=3, droprate=config['droprate'])
+    mdl = ATTN_TP(config)
+    if const: mdl.apply(init_constant)
 
-
-    mdl.update_dict(); eps = config['epochs']
-    mdlpath = f'Initialized Plots/{"&".join(mdl.features)}/{mdl.model_name().replace("EPOCHS0",f"EPOCHS{eps}")}'
-    if not os.path.isdir(mdlpath): os.makedirs(mdlpath)
-
-    if config['checkpoint_dir'] != "None":
-        chkpt = os.path.join(config["checkpoint_dir"], 'checkpoint')
+    if checkpoint_dir:
+        chkpt = os.path.join(checkpoint_dir, 'checkpoint')
         with open(chkpt) as f:
             state = json.loads(f.read())
             start = state['step'] + 1
@@ -76,33 +54,32 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 
     epoch_losses = torch.zeros(config['epochs'], device=mdl.device)
     epoch_test_losses = torch.zeros(config['epochs'], device=mdl.device)
-    for ep in (tqdm.trange(config['epochs'], desc='epoch', position=0, leave=False) if not config['raytune'] else range(config['epochs'])):
+    for ep in (tqdm.trange(config['epochs'], desc='epoch', position=0, leave=False) if not raytune else range(config['epochs'])):
         losses = torch.zeros(len(train_dl), device=mdl.device)
 
-        for batch_idx, (fp, ft, wc) in enumerate((tqdm.tqdm(train_dl, desc='flight', position=1, leave=False) if not config['raytune'] else train_dl)):  # was len(flight_data)
+        for batch_idx, (fp, ft, wc) in enumerate((tqdm.tqdm(train_dl, desc='flight', position=1, leave=False) if not raytune else train_dl)):  # was len(flight_data)
             # Extract flight plan, flight track, and weather cubes
             if mdl.device.__contains__('cuda'):
                 fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
                 ft = ft[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                wc = wc.cuda(device=mdl.device, non_blocking=True)
+                wc = {x: wc[x].cuda(device=mdl.device, non_blocking=True) for x in wc}
             else:
                 fp, ft = fp[:, :, :], ft[:, :, :]
-            if config['scale']:
+            if scale:
                 # scale lats 24 - 50 -> 0-1
-
                 fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
                 ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
+                wc['lats'] = (wc['lats'] - 24.) / (50. - 24.)
 
                 # scale lons -126 - -66-> 0-1
                 fp[:, :, 1] = (fp[:, :, 1] + 126.) / (-66. + 126.)
                 ft[:, :, 1] = (ft[:, :, 1] + 126.) / (-66. + 126.)
+                wc['lons'] = (wc['lons'] + 126.) / (-66. + 126.)
 
                 # scale alts/ETs -1000 - 64000 -> 0-1
-                fpa, fta, wca = fp[:,:,2], ft[:,:,2], wc
-                print(f'FP: {fpa.min()}-{fpa.max()}\nFT:{fta.min()}-{fta.max()}\nWC:{wca.min()}-{wca.max()}')
                 fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
-                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 1000.)
-                wc = (wc + 1000.) / (64000. + 1000.)
+                ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
+                wc['data'] = (wc['data'] + 1000.) / (64000. + 1000.)
 
             if mdl.paradigm == 'Regression':
                 print("\nFlight {}/{}: ".format(batch_idx + 1, len(train_dl)) + str(len(fp)) + " points")
@@ -130,22 +107,22 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             elif mdl.paradigm == 'Seq2Seq':
                 mdl.optimizer.zero_grad()
 
-                lat, lon, alt = fp[0,:,0], fp[0,:,1], fp[0,:,2]
-                coordlen = int(mdl.rnn_hidden/3)
-                padlen = mdl.rnn_hidden - 3*coordlen
-                tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, train_dl.batch_size),
-                                        lon.repeat(coordlen).view(-1, train_dl.batch_size),
-                                        alt.repeat(coordlen).view(-1, train_dl.batch_size),
-                                        torch.zeros(padlen, len(lat),
-                                        device=mdl.device))).T.view(1,-1,mdl.rnn_hidden)
-                mdl.init_hidden_cell(tns_coords)
-
-                y_pred = mdl(wc, fp[:])
+                # lat, lon, alt = fp[0,:,0], fp[0,:,1], fp[0,:,2]
+                # coordlen = int(mdl.rnn_hidden/3)
+                # padlen = mdl.rnn_hidden - 3*coordlen
+                # tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, train_dl.batch_size),
+                #                         lon.repeat(coordlen).view(-1, train_dl.batch_size),
+                #                         alt.repeat(coordlen).view(-1, train_dl.batch_size),
+                #                         torch.zeros(padlen, len(lat),
+                #                         device=mdl.device))).T.view(1,-1,mdl.rnn_hidden)
+                # mdl.init_hidden_cell(tns_coords)
+                wc_coord = torch.stack((wc['lats'],wc['lons']), -1)
+                y_pred = mdl(wc['data'], wc_coord, fp[:])
                 single_loss = mdl.loss_function(y_pred, ft)
                 losses[batch_idx] = single_loss.view(-1).detach().item()
-                single_loss.backward()
-                if config['gradclip']: torch.nn.utils.clip_grad_norm_(mdl.parameters(), max_norm=2, norm_type=2)
-                mdl.optimizer.step()
+                # single_loss.backward()
+                if gradclip: torch.nn.utils.clip_grad_norm_(mdl.parameters(), max_norm=2, norm_type=2)
+                # mdl.optimizer.step()
 
             if batch_idx == len(train_dl) - 1:
                 epoch_losses[ep] = torch.mean(losses).view(-1)
@@ -158,43 +135,47 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             if mdl.device.__contains__('cuda'):
                 fp = fp[:, :, :].cuda(device=mdl.device, non_blocking=True)
                 ft = ft[:, :, :].cuda(device=mdl.device, non_blocking=True)
-                wc = wc.cuda(device=mdl.device, non_blocking=True)
+                wc = {x: wc[x].cuda(device=mdl.device, non_blocking=True) for x in wc}
             else:
                 fp, ft = fp[:, :, :], ft[:, :, :]
 
-            if config['scale']:
+            if scale:
                 # scale lats 24 - 50 -> 0-1
                 fp[:, :, 0] = (fp[:, :, 0] - 24.) / (50. - 24.)
                 ft[:, :, 0] = (ft[:, :, 0] - 24.) / (50. - 24.)
+                wc['lats'] = (wc['lats'] - 24.) / (50. - 24.)
+
 
                 # scale lons -126 - -66-> 0-1
                 fp[:, :, 1] = (fp[:, :, 1] + 126.) / (-66. + 126.)
                 ft[:, :, 1] = (ft[:, :, 1] + 126.) / (-66. + 126.)
+                wc['lons'] = (wc['lons'] + 126.) / (-66. + 126.)
 
                 # scale alts/ETs -1000 - 64000 -> 0-1
                 fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
                 ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 10000)
-                wc = (wc + 1000.) / (64000. + 1000.)
+                wc['data'] = (wc['data'] + 1000.) / (64000. + 1000.)
 
             if mdl.paradigm == 'Seq2Seq':
                 mdl.optimizer.zero_grad()
-                lat, lon, alt = fp[0, :, 0], fp[0, :, 1], fp[0, :, 2]
-                coordlen = int(mdl.rnn_hidden / 3)
-                padlen = mdl.rnn_hidden - 3 * coordlen
-                tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, test_dl.batch_size),
-                                           lon.repeat(coordlen).view(-1, test_dl.batch_size),
-                                           alt.repeat(coordlen).view(-1, test_dl.batch_size),
-                                           torch.zeros(padlen, len(lat),
-                                                       device=mdl.device))).T.view(1, -1, mdl.rnn_hidden)
-                mdl.init_hidden_cell(tns_coords)
+                # lat, lon, alt = fp[0, :, 0], fp[0, :, 1], fp[0, :, 2]
+                # coordlen = int(mdl.rnn_hidden / 3)
+                # padlen = mdl.rnn_hidden - 3 * coordlen
+                # tns_coords = torch.vstack((lat.repeat(coordlen).view(-1, test_dl.batch_size),
+                #                            lon.repeat(coordlen).view(-1, test_dl.batch_size),
+                #                            alt.repeat(coordlen).view(-1, test_dl.batch_size),
+                #                            torch.zeros(padlen, len(lat),
+                #                                        device=mdl.device))).T.view(1, -1, mdl.rnn_hidden)
+                # mdl.init_hidden_cell(tns_coords)
 
-                y_pred = mdl(wc, fp[:])
+                wc_coord = torch.stack((wc['lats'], wc['lons']), -1)
+                y_pred = mdl(wc['data'], wc_coord, fp[:])
                 single_loss = mdl.loss_function(y_pred, ft)
                 test_losses[test_batch] = single_loss.view(-1).detach().item()
         epoch_test_losses[ep] = test_losses.mean().view(-1)
         mdl.train()
 
-        if (not config['raytune']) and ep % 10 == 0:
+        if (not raytune) and ep % 10 == 0:
             if mdl.device.__contains__('cuda'):
                 losses = losses.cpu()
                 test_losses = test_losses.cpu()
@@ -205,31 +186,23 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
             plt.xlabel('Flight')
             plt.ylabel('Loss (MSE)')
             # plt.savefig('Eval Epoch{}.png'.format(ep+1), dpi=400)
-            plt.savefig(f'{mdlpath}/Eval Epoch{ep+1}.png', dpi=400)
+            plt.savefig('Initialized Plots/Eval Epoch{}.png'.format(ep + 1), dpi=400)
             plt.close()
+            fig = plt.figure(); ax = plt.axes(projection='3d')
+            pltfp, plty, pltft = fp, y_pred, ft
+            if 'cuda' in mdl.device: pltfp, plty, pltft = pltfp.cpu(), plty.cpu(), pltft.cpu()
+            pltfp, plty, pltft = pltfp.detach().numpy(), plty.detach().numpy(), pltft.detach().numpy()
+            ax.plot(pltfp[:,-1,1], pltfp[:,-1,0], pltfp[:,-1,2], label='Flight Plan')
+            ax.plot(plty[:,-1,1], plty[:,-1,0], plty[:,-1,2], label='Prediction')
+            ax.plot(pltft[:,-1,1], pltft[:,-1,0], pltft[:,-1,2], label='Flight Track')
+            ax.legend(); fig.savefig('Initialized Plots/Sample from Epoch{}.png'.format(ep+1),dpi=300)
+            plt.close(); fig.clf(); ax.cla()
             del losses
             gc.collect()
-
-        # stop / re-run model training if model diverges
-        if torch.isnan(epoch_losses[ep]) or torch.isnan(epoch_test_losses[ep]):
-            store_losses(e_losses, e_test_losses)
-            raise ValueError(f'{mdl.model_name()} diverged at {ep} epochs')
-
-        # regular checkpointing
-        if (not config['raytune']) and ep % config['checkpoint_freq_epochs'] == 0 and \
-                torch.isnan(epoch_losses[ep]) and torch.isnan(epoch_test_losses[ep]):
-                mdl.save_model(override=True)
-
-        # Early-stopping
-        if ep>config['stopping_iter_no_change']:
-            ls = epoch_losses if len(test_dataset)==0 else epoch_test_losses
-            epoch_diffs = ls[ep-config['stopping_iter_no_change']] -
-                               ls[ep-config['stopping_iter_no_change']-1]
-            if (-1*epoch_diffs < config['stopping_tol']).all():
-                mdl.save_model(override=True)
-                store_losses(e_losses, e_test_losses)
-                raise OSError(f'{mdl}: Early Stopping. {ep} epochs complete')
-
+        if (not raytune) and ep % 50 == 0:
+            mdl.epochs_trained = ep
+            mdl.update_dict()
+            mdl.save_model(override=True)
         if raytune:
             if torch.isnan(epoch_test_losses[ep]): raise ValueError('Epoch Loss is NaN')
             with tune.checkpoint_dir(step=ep) as checkpoint_dir:
@@ -238,8 +211,8 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
                     f.write(json.dumps({'step': ep}))
                 mdl.epochs_trained = ep
                 if epoch_test_losses[ep] == epoch_test_losses[:ep+1].min():
-                    todel = [x for x in os.listdir('.') if mdl.model_name()[:mdl.model_name().index('EPOCHS')] in x]
-                    [os.remove(x) for x in todel]
+                    # todel = [x for x in os.listdir('.') if mdl.model_name()[:mdl.model_name().index('EPOCHS')] in x]
+                    # [os.remove(x) for x in todel]
                     mdl.save_model(override=True, override_path='.')
                     #torch.save({'struct_dict': mdl.struct_dict, 'state_dict': mdl.state_dict(),
                     #        'opt_dict': mdl.optimizer.state_dict(), 'epochs_trained': mdl.epochs_trained,
@@ -252,6 +225,27 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
         epoch_test_losses = epoch_test_losses.cpu()
     e_losses = epoch_losses.detach().numpy()
     e_test_losses = epoch_test_losses.detach().numpy()
+    if not raytune:
+        plt.plot(e_losses, label='train data')
+        plt.plot(e_test_losses, label='test data')
+        plt.legend()
+        plt.title('Avg Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Avg Loss (MSE)')
+        plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+        plt.close()
 
-    if not config['raytune']: store_losses(e_losses, e_test_losses)
-    return mdl
+        plt.plot(e_losses[:], label='train data')
+        plt.plot(e_test_losses[:], label='test data')
+        plt.legend()
+        plt.title('Avg Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Avg Loss (MSE)')
+        plt.ylim([0, .01])
+        plt.yticks(np.linspace(0, .01, 11))
+        plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
+        plt.close()
+
+        df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
+        df_eloss.to_csv('model_epoch_losses.txt')
+        return mdl
