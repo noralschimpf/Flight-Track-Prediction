@@ -19,7 +19,7 @@ plotting = False
 valid_products = ['ECHO_TOP','VIL','tmp','uwind','vwind']
 mdl_product_dirs = [os.path.join(os.path.abspath('.'), 'Models/{}'.format(x)) for x in os.listdir('Models') if
                         os.path.isdir('Models/{}'.format(x)) and any([y in x for y in valid_products])]
-mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS' in y]
+mdl_dirs = [os.path.join(x,y) for x in mdl_product_dirs for y in os.listdir(x) if 'EPOCHS' in y and not 'EPOCHS0' in y]
 mdl_dirs= [x for x in mdl_dirs if not len(os.listdir(x)) == sum([1 for y in os.listdir(x) if 'IGNORE' in y])]
 mdls = [x for x in os.listdir('Models') if os.path.isdir('Models/{}'.format(x)) and 'EPOCH' in x]
 df_val_summary, df_test_summary = pd.DataFrame(), pd.DataFrame()

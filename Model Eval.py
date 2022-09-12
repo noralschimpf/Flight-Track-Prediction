@@ -51,7 +51,7 @@ def main():
     df_test.to_csv('Test Dataset Valid Flights.csv')
 
     for mdl_group in tqdm.tqdm(mdl_dirs, desc='model', leave=False, position=0):
-        mdl_splits = [x for x in os.listdir(mdl_group) if 'fold' in x and not 'IGNORE' in x and not 'EPOCHS0' in x]
+        mdl_splits = [x for x in os.listdir(mdl_group) if 'fold' in x and not 'IGNORE' in x and not 'EPOCHS0' in x and not x=='fold0']
         if len(mdl_splits) > 0:
             df_total_losses = pd.DataFrame(columns=['flight name', 'loss (MSE)'])
             for fold in tqdm.tqdm(mdl_splits, desc='fold', leave=False, position=1):

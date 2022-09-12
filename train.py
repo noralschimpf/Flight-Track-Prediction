@@ -23,7 +23,7 @@ import json
 
 
 def main():
-    logging.basicConfig(filename='logs/Training.log', filemode='w', level=logging.info() )
+    logging.basicConfig(filename='logs/Training.log', filemode='w', level=logging.INFO)
     warnings.filterwarnings('ignore')
     if os.name == 'nt':
         torch.multiprocessing.set_start_method('spawn')
@@ -50,34 +50,16 @@ def main():
     #saalstm = tune.Analysis('~/ray_results/CNN+SA_LSTM')
     #cfg_lstm = sarlstm.get_best_config(metric='valloss', mode='min')
 
-    cfgs = [config['models']['config_cnnlstm'], config['models']['config_sargru']]
+    cfgs = [config['models']['config_dflt_sargru'], config['models']['config_dflt_cnnlstm']]
+    # cfgs = [config['models']['config_dflt_cnnlstm']]
 
     # Correct Models
     glb_config = {key: config[key] for key in list(set(config.keys()) - set(['models']))}
     for c in range(len(cfgs)):
         for key in glb_config:
             if not key in list(cfgs[c].keys()): cfgs[c][key] = config[key]
-        # cfg['device'] = config['dev']
-        # cfg['epochs'] = config['epochs']
-        # cfg['batch_size'] = config['bs']
         if not 'weight_reg' in cfgs[c].keys(): cfgs[c]['weight_reg'] = 0.
         cfgs[c] = parseConfig(cfgs[c])
-        '''if isinstance(config['optim'], str):
-            if 'Adam' in config['optim']:
-                config['optim'] = torch.optim.Adam
-            elif 'RMS' in config['optim']:
-                config['optim'] = torch.optim.RMSprop
-            elif 'SGD' in config['optim']:
-                config['optim'] = torch.optim.SGD
-        if isinstance(config['rnn'], str):
-            if 'LSTM' in config['rnn']:
-                config['rnn'] = torch.nn.LSTM
-            elif 'GRU' in config['rnn']:
-                config['rnn'] = torch.nn.GRU
-            elif 'IndRNN' in config['rnn']:
-                config['rnn'] = indrnn
-        if isinstance(config['HLs'], str): config['HLs'] = str_to_list(config['HLs'], int)
-        if isinstance(config['ConvCh'], str): config['ConvCh'] = str_to_list(config['ConvCh'], int)'''
 
 
     for products in config['list_products']:
@@ -141,25 +123,41 @@ def main():
                 # retry fit if diverge
                 retries=3; retry_count=0
                 for i in range(retries):
-                    try: mdl = fit(cfg, train_dataset, test_dataset)
+                    try:
+                        mdl = fit(cfg, train_dataset, test_dataset)
+                        mdl.epochs_trained = config['epochs']
+                        mdl.save_model(override=True, appenddir='fold0')
                     except ValueError as e:
+                        e, mdl = e.args[0], e.args[1]
                         if i < retries:
-                            newlr = config['lr']/10
-                            config['lr'] = newlr
+                            newlr = cfg['lr']/10
+                            cfg['lr'] = newlr
                             retry_count+=1
                             logging.warning(e)
                             logging.info(f'reducing learning rate to {newlr}')
                         else:
                             logging.warning(e)
                             logging.error(f'Cannot converge {mdl.model_name()}')
-                if not retry_count==retries: foldstr = 'IGNORE' + foldstr
+                    except OSError as e:
+                        e, mdl = e.args[0], e.args[1]
+                        oldname = mdl.model_name()
+                        mdl.epochs_actual = mdl.epochs_trained
+                        mdl.epochs_trained = config['epochs']
+                        if os.path.isdir(f'Models/{prdstr}/{oldname}'):
+                            os.rename(f'Models/{prdstr}/{oldname}', f'Models/{prdstr}/{mdl.model_name()}')
+                        mdl.save_model(override=True, appenddir='fold0')
+                        logging.warning(f'{foldstr}: {e}')
+                        break
+                if retry_count==retries: foldstr = 'IGNORE' + foldstr
 
-                mdl.epochs_trained = config['epochs']
-                mdl.save_model(override=True)
-                shutil.rmtree('Models/{}/{}'.format(prdstr, mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')))
+
+                training_path = f"Models/{prdstr}/{mdl.model_name().replace('EPOCHS{}'.format(mdl.epochs_trained), 'EPOCHS0')}"
+                if os.path.isfile(training_path): shutil.rmtree(training_path)
                 #os.makedirs('Models/{}/{}'.format(mdl.model_name(), foldstr))
                 fold_subdir = os.path.join('Models',prdstr, mdl.model_name(), foldstr)
-                if not os.path.isdir(fold_subdir):
+                if os.path.isdir(f'Models/{prdstr}/{mdl.model_name()}/fold0'):
+                    os.rename(f'Models/{prdstr}/{mdl.model_name()}/fold0', fold_subdir)
+                elif not os.path.isdir(fold_subdir):
                     os.makedirs(fold_subdir)
                 for fname in os.listdir('Models/{}/{}'.format(prdstr,mdl.model_name())):
                     if os.path.isfile(os.path.join('Models',prdstr,mdl.model_name(), fname)):
@@ -174,8 +172,8 @@ def main():
                     os.makedirs('Initialized Plots/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
                 if not os.path.isdir('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr)):
                     os.makedirs('Models/{}/{}/{}'.format(prdstr, mdl.model_name(), foldstr))
-
-                plotstr = f'Initialized Plots/{prdstr}/{mdl.model_name()}'
+                epochs = config['epochs']
+                plotstr = f'Initialized Plots/{prdstr}/{mdl.model_name().replace(f"EPOCHS{mdl.epochs_trained}",f"EPOCHS{epochs}")}'
                 plots_to_move = [x for x in os.listdir(plotstr) if x.__contains__('.png')]
                 for plot in plots_to_move:
                     shutil.copy(f'{plotstr}/{plot}', f'{plotstr}/{foldstr}/{plot}')
@@ -184,8 +182,8 @@ def main():
 
                 shutil.copy(f'{testname}', f'Models/{prdstr}/{mdl.model_name()}/{foldstr}/test_flight_samples.txt')
                 shutil.copy(f'{trainname}', f'Models/{prdstr}/{mdl.model_name()}/{foldstr}/train_flight_samples.txt')
-                shutil.copy(f'Initialized Plots/{prdstr}/{mdl.model_name()}/model_epoch_losses.txt',
-                            f'Models/{prdstr}/{mdl.model_name()}/{foldstr}/model_epoch_losses.txt')
+                # shutil.copy(f'Models/{prdstr}/{mdl.model_name()}/model_epoch_losses.txt',
+                #             f'Models/{prdstr}/{mdl.model_name()}/{foldstr}/model_epoch_losses.txt')
 
 
 if __name__ == '__main__':

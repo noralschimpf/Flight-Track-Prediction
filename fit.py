@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 import os, shutil, gc, tqdm, json, random, inspect
@@ -7,29 +9,37 @@ from libmodels.model import load_model, init_constant
 from ray import tune
 
 
-def store_losses(e_losses, e_test_losses, ):
-    plt.plot(e_losses, label='train data')
-    plt.plot(e_test_losses, label='test data')
+def store_losses(e_losses: np.ndarray, e_test_losses: np.ndarray, prd: str, mdlname: str):
+    # e_losses, e_test_losses = e_losses.detach().cpu().to_numpy(), e_test_losses.detach().cpu().to_numpy()
+    el, etl = None, None
+    for e, e_orig in [(el, e_losses), (etl, e_test_losses)]:
+        if (e_orig==0).any(): e = e_orig[:np.where(e_losses==0)[0][0]]
+        else: e = e_orig
+    # el, etl = e_losses[:np.where(e_losses==0)[0][0]], e_test_losses[:np.where(e_test_losses==0)[0][0]]
+    plt.plot(el, label='train data')
+    plt.plot(etl, label='test data')
     plt.legend()
     plt.title('Avg Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Avg Loss (MSE)')
-    plt.savefig('Initialized Plots/Model Eval.png', dpi=300)
+    plt.savefig(f'Initialized Plots/{prd}/{mdlname}/Model Eval.png', dpi=300)
     plt.close()
 
-    plt.plot(e_losses[:], label='train data')
-    plt.plot(e_test_losses[:], label='test data')
+    plt.plot(el, label='train data')
+    plt.plot(etl, label='test data')
     plt.legend()
     plt.title('Avg Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Avg Loss (MSE)')
     plt.ylim([0, .01])
     plt.yticks(np.linspace(0, .01, 11))
-    plt.savefig('Initialized Plots/Model Eval RangeLimit.png', dpi=300)
+    plt.savefig(f'Initialized Plots/{prd}/{mdlname}/Model Eval RangeLimit.png', dpi=300)
     plt.close()
 
-    df_eloss = pd.DataFrame({'loss': e_losses, 'valloss': e_test_losses})
-    df_eloss.to_csv('model_epoch_losses.txt')
+    df_eloss = pd.DataFrame({'loss': el, 'valloss': etl})
+    dfpath = f'Models/{prd}/{mdlname}'
+    if not os.path.isdir(dfpath): os.makedirs(dfpath)
+    df_eloss.to_csv(f'{dfpath}/model_epoch_losses.txt')
 
 
 
@@ -99,7 +109,7 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 
                 # scale alts/ETs -1000 - 64000 -> 0-1
                 fpa, fta, wca = fp[:,:,2], ft[:,:,2], wc
-                print(f'FP: {fpa.min()}-{fpa.max()}\nFT:{fta.min()}-{fta.max()}\nWC:{wca.min()}-{wca.max()}')
+                # print(f'FP: {fpa.min()}-{fpa.max()}\nFT:{fta.min()}-{fta.max()}\nWC:{wca.min()}-{wca.max()}')
                 fp[:, :, 2] = (fp[:, :, 2] + 1000.) / (64000. + 1000.)
                 ft[:, :, 2] = (ft[:, :, 2] + 1000.) / (64000. + 1000.)
                 wc = (wc + 1000.) / (64000. + 1000.)
@@ -212,26 +222,41 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
 
         # stop / re-run model training if model diverges
         if torch.isnan(epoch_losses[ep]) or torch.isnan(epoch_test_losses[ep]):
-            store_losses(e_losses, e_test_losses)
-            raise ValueError(f'{mdl.model_name()} diverged at {ep} epochs')
+            mdl.epochs_trained = config['epochs']
+            mdl.epochs_actual = ep
+            try: store_losses(epoch_losses.cpu().detach().numpy(), epoch_test_losses.cpu().detach().numpy(), '&'.join(mdl.features), mdl.model_name())
+            except Exception as e:
+                warnings.warn("store_losses failed")
+            raise ValueError(f'{mdl.model_name()} diverged at {ep} epochs', mdl)
 
         # regular checkpointing
-        if (not config['raytune']) and ep % config['checkpoint_freq_epochs'] == 0 and \
-                torch.isnan(epoch_losses[ep]) and torch.isnan(epoch_test_losses[ep]):
-                mdl.save_model(override=True)
+        elif (not config['raytune']) and ep % config['checkpoint_freq_epochs'] == 0:
+                mdl.save_model(override=True, appenddir='fold0')
 
         # Early-stopping
         if ep>config['stopping_iter_no_change']:
             ls = epoch_losses if len(test_dataset)==0 else epoch_test_losses
-            epoch_diffs = ls[ep-config['stopping_iter_no_change']] -
-                               ls[ep-config['stopping_iter_no_change']-1]
-            if (-1*epoch_diffs < config['stopping_tol']).all():
-                mdl.save_model(override=True)
-                store_losses(e_losses, e_test_losses)
-                raise OSError(f'{mdl}: Early Stopping. {ep} epochs complete')
+            epoch_diffs = ls[ep-config['stopping_iter_no_change']:ep] - \
+                               ls[ep-config['stopping_iter_no_change']-1:ep-1]
+            if (torch.abs(epoch_diffs) < config['stopping_tol']).all() and not (epoch_diffs < 0).any():
+                mdl.epochs_trained = config['epochs']
+                mdl.epochs_actual = ep
+                mdl.save_model(override=True, appenddir='fold0')
+                try: store_losses(epoch_losses.cpu().detach().numpy(), epoch_test_losses.cpu().detach().numpy(),
+                             '&'.join(mdl.features), mdl.model_name())
+                except Exception as e:
+                    warnings.warn("store_losses failed")
+                raise OSError(f'{mdl.model_name()}: Early Stopping. {ep} epochs complete', mdl)
 
         if raytune:
-            if torch.isnan(epoch_test_losses[ep]): raise ValueError('Epoch Loss is NaN')
+            if torch.isnan(epoch_test_losses[ep]):
+                mdl.epochs_trained = config['epochs']
+                mdl.epochs_actual = ep
+                try: store_losses(epoch_losses.cpu().detach().numpy(), epoch_test_losses.cpu().detach().numpy(),
+                             '&'.join(mdl.features), mdl.model_name())
+                except Exception as e:
+                    warnings.warn("store_losses failed")
+                raise ValueError('Epoch Loss is NaN', mdl)
             with tune.checkpoint_dir(step=ep) as checkpoint_dir:
                 path = os.path.join(checkpoint_dir, 'checkpoint')
                 with open(path,"w") as f:
@@ -253,5 +278,10 @@ def fit(config: dict, train_dataset: torch.utils.data.DataLoader, test_dataset: 
     e_losses = epoch_losses.detach().numpy()
     e_test_losses = epoch_test_losses.detach().numpy()
 
-    if not config['raytune']: store_losses(e_losses, e_test_losses)
+    if not config['raytune']:
+        mdl.epochs_trained = config['epochs']
+        mdl.epochs_actual = ep
+        try: store_losses(e_losses, e_test_losses, '&'.join(mdl.features), mdl.model_name())
+        except Exception as e:
+            warnings.warn("store_losses failed")
     return mdl

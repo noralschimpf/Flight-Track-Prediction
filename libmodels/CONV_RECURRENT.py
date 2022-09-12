@@ -268,10 +268,10 @@ class CONV_RECURRENT(nn.Module):
             self.struct_dict['sched'] = self.sched
 
 
-    def save_model(self, override_path: str = None, override: bool = False):
+    def save_model(self, override_path: str = None, appenddir="", override: bool = False):
         model_name = self.model_name()
         if override_path == None:
-            container = 'Models/{}/{}/'.format('&'.join(self.features),model_name)
+            container = 'Models/{}/{}/{}'.format('&'.join(self.features),model_name,appenddir)
             model_path = '{}/{}'.format(container, model_name)
             if os.path.isfile(model_path) and not override:
                 is_used=True; i=0
